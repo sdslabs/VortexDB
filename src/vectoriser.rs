@@ -10,7 +10,7 @@ struct VectorizationRequest {
 
 #[derive(Deserialize)]
 pub struct VectorResponse{
-    text: String,
+    // text: String,
     pub vector: Vec<f32>
 }
 

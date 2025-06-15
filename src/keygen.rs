@@ -1,5 +1,5 @@
 use super::types::Data;
-use sha2::{Digest, Sha256};
+// use sha2::{Digest, Sha256};
 
 pub fn serialize(vector: Data) -> Vec<u8> {
     let bytes = bincode::serialize(&vector).unwrap();

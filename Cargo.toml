@@ -19,4 +19,4 @@ rand = "0.8.5"
 
 [[bin]]
 name = "vector_db"
-path = "main.rs"
+path = "src/main.rs"

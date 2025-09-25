@@ -128,7 +128,7 @@ mod tests {
     use super::*;
 
     fn create_test_db() -> (RocksDbStorage, String) {
-        let dir_path = String::from("/home/hawkeye/works/vector-db/testdb");
+        let dir_path = String::from("/tmp/rocksdb");
         let db = RocksDbStorage::new(dir_path.clone()).expect("Failed to create RocksDB");
         (db, dir_path)
     }

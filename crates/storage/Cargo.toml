@@ -9,3 +9,4 @@ rocksdb = "0.21.0"
 
 core = { path = "../core" }
 index = { path = "../index" }
+tempfile = "3.23.0"

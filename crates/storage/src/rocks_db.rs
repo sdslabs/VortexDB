@@ -127,10 +127,14 @@ impl StorageEngine for RocksDbStorage {
 mod tests {
     use super::*;
 
+    use tempfile::tempdir;
+
     fn create_test_db() -> (RocksDbStorage, String) {
-        let dir_path = String::from("/tmp/rocksdb");
-        let db = RocksDbStorage::new(dir_path.clone()).expect("Failed to create RocksDB");
-        (db, dir_path)
+        let temp_dir = tempdir().unwrap();
+        let temp_dir_path = temp_dir.path().to_str().unwrap().to_string();
+
+        let db = RocksDbStorage::new(temp_dir_path.clone()).expect("Failed to create RocksDB");
+        (db, temp_dir_path)
     }
 
     #[test]

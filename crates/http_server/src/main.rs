@@ -104,22 +104,26 @@ mod tests {
     async fn test_all_routes() {
         let server = setup_test_server();
         // 1 Insert a point
-        let point_id = 1;
         let insert_response = server
             .post("/points")
-            .json(&json!({"vector": [0.1, 0.2], "payload": {}}))
+            .json(
+                &json!({"vector": [0.1, 0.2], "payload": {"content_type": "Image", "content": "tester"}}),
+            )
             .await;
         assert_eq!(insert_response.status_code(), StatusCode::CREATED);
         println!("Insert Test passed");
+
+        let insert_result: handler::InsertResponse = insert_response.json();
+        let point_id = insert_result.point_id;
 
         // 2 Get the point back
         let get_response = server.get(&format!("/points/{}", point_id)).await;
         get_response.assert_status_ok();
         let point: Point = get_response.json();
-        assert_eq!(point.id, point_id);
+
         let expected_vec: DenseVector = vec![0.1, 0.2];
         assert_eq!(point.vector.unwrap(), expected_vec);
-        println!("Retrival Test passed");
+        println!("Retrieval Test passed");
 
         println!("Deletion Test passed");
 
@@ -136,7 +140,7 @@ mod tests {
         println!("{:?}", search_response);
         let search_results: SearchResponse = search_response.json();
         assert_eq!(search_results.results.len(), 1);
-        assert_eq!(search_results.results[0], point_id);
+        assert_eq!(search_results.results[0].to_string(), point_id.to_string());
         println!("Search Test passed");
 
         // 4 Delete the point

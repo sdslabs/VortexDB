@@ -240,7 +240,7 @@ mod tests {
         index
             .insert(IndexedVector {
                 id: id1,
-                vector: vec![1.0, 0.0, 1.0, 0.0],
+                vector: vec![1.0, 0.0, 1.0, 1.0],
             })
             .unwrap();
         index

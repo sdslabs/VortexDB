@@ -15,7 +15,7 @@ pub struct InsertRequest {
     pub payload: Payload,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct InsertResponse {
     pub point_id: PointId,
 }

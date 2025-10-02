@@ -57,10 +57,10 @@ impl DatabaseManager {
                 self.selected_database = Some((name, path));
                 Ok(())
             }
-            Err(e) => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to create database: {:?}", e),
-            )),
+            Err(err) => Err(io::Error::other(format!(
+                "Failed to create database: {:?}",
+                err
+            ))),
         }
     }
 
@@ -88,10 +88,10 @@ impl DatabaseManager {
                 self.selected_database = Some((name, path));
                 Ok(())
             }
-            Err(e) => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to open database: {:?}", e),
-            )),
+            Err(err) => Err(io::Error::other(format!(
+                "Failed to open database: {:?}",
+                err
+            ))),
         }
     }
 

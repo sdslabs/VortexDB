@@ -9,6 +9,8 @@ pub type Element = f32;
 // pub type ElementHalf = f16; - Unstable https://github.com/rust-lang/rust/issues/116909
 pub type ElementByte = u8;
 
+pub type Dimension = usize;
+
 // Dense Vector and Vector are considered same
 // Sparse vector implementation not supported yet. Refer lib/sparse/src/common/sparse_vector.rs
 pub type DenseVector = Vec<Element>;
@@ -43,7 +45,7 @@ pub struct IndexedVector {
     pub vector: DenseVector,
 }
 
-#[derive(Deserialize, Copy, Clone)]
+#[derive(Debug, Deserialize, Copy, Clone)]
 pub enum Similarity {
     Euclidean,
     Manhattan,
@@ -89,3 +91,29 @@ impl<'q> Eq for DistanceOrderedVector<'q> {}
 //     Discovery(DiscoveryQuery<VectorInternal>),
 //     Context(ContextQuery<VectorInternal>),
 // }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OrdF32(f32);
+
+impl OrdF32 {
+    pub fn new(x: f32) -> Self {
+        Self(x)
+    }
+    pub fn into_inner(self) -> f32 {
+        self.0
+    }
+}
+
+impl Eq for OrdF32 {}
+
+impl Ord for OrdF32 {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.total_cmp(&other.0)
+    }
+}
+
+impl PartialOrd for OrdF32 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}

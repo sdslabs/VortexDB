@@ -47,7 +47,7 @@ impl VectorIndex for FlatIndex {
             .index
             .iter()
             .map(|point| DistanceOrderedVector {
-                distance: distance(point.vector.clone(), query_vector.clone(), similarity),
+                distance: distance(&point.vector, &query_vector, similarity),
                 query_vector: &query_vector,
                 point_id: Some(point.id),
             })

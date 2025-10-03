@@ -1,4 +1,5 @@
 use api::DbConfig;
+use defs::Similarity;
 use dotenv::dotenv;
 use index::IndexType;
 use std::env;
@@ -172,11 +173,34 @@ impl ServerConfig {
             .parse()
             .unwrap_or(false);
 
+        // Similarity metric
+        let similarity: Similarity = match env::var("SIMILARITY") {
+            Ok(val) => match val.to_lowercase().as_str() {
+                "cosine" => Similarity::Cosine,
+                "euclidean" => Similarity::Euclidean,
+                "manhattan" => Similarity::Manhattan,
+                "hamming" => Similarity::Hamming,
+                other => {
+                    event!(
+                        Level::WARN,
+                        "Unknown SIMILARITY '{}', defaulting to cosine",
+                        other
+                    );
+                    Similarity::Cosine
+                }
+            },
+            Err(_) => {
+                event!(Level::WARN, "SIMILARITY not defined, defaulting to cosine");
+                Similarity::Cosine
+            }
+        };
+
         let db_config = DbConfig {
             storage_type,
             index_type,
             data_path,
             dimension,
+            similarity,
         };
 
         Ok(ServerConfig {

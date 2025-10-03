@@ -1,6 +1,7 @@
-use defs::{DbError, IndexedVector, Similarity};
+use defs::{DbError, Dimension, IndexedVector, Similarity};
 
 use defs::{DenseVector, Payload, Point, PointId};
+use index::hnsw::HnswIndex;
 use std::path::PathBuf;
 // use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -136,7 +137,8 @@ pub struct DbConfig {
     pub storage_type: StorageType,
     pub index_type: IndexType,
     pub data_path: PathBuf,
-    pub dimension: usize,
+    pub dimension: Dimension,
+    pub similarity: Similarity,
 }
 
 pub fn init_api(config: DbConfig) -> Result<VectorDb, DbError> {
@@ -149,6 +151,10 @@ pub fn init_api(config: DbConfig) -> Result<VectorDb, DbError> {
     // Initialize the vector index
     let index: Arc<RwLock<dyn VectorIndex>> = match config.index_type {
         IndexType::Flat => Arc::new(RwLock::new(FlatIndex::new())),
+        IndexType::HNSW => Arc::new(RwLock::new(HnswIndex::new(
+            config.similarity,
+            config.dimension,
+        ))),
         _ => Arc::new(RwLock::new(FlatIndex::new())),
     };
 
@@ -178,6 +184,7 @@ mod tests {
             index_type: IndexType::Flat,
             data_path: temp_dir.path().to_path_buf(),
             dimension: 3,
+            similarity: Similarity::Cosine,
         };
         init_api(config).unwrap()
     }

@@ -4,6 +4,7 @@ use crate::service::vectordb::{DenseVector, InsertVectorRequest, Payload, PointI
 use crate::service::{VectorDBService, run_server};
 use crate::utils::ServerEndpoint;
 use api::DbConfig;
+use defs::Similarity;
 use index::IndexType;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -31,6 +32,7 @@ async fn start_test_server() -> Result<SocketAddr, Box<dyn std::error::Error>> {
         index_type: IndexType::Flat,
         data_path: temp_dir.path().to_path_buf(),
         dimension: 3,
+        similarity: Similarity::Cosine,
     };
 
     let vector_db_api = api::init_api(db_config)?;

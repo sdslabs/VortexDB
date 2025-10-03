@@ -1,4 +1,5 @@
 use api::{DbConfig, VectorDb, init_api};
+use defs::Similarity;
 use index::IndexType;
 use std::io;
 use std::path::PathBuf;
@@ -47,6 +48,7 @@ impl DatabaseManager {
             index_type: IndexType::Flat,
             data_path: path.clone(),
             dimension: 512,
+            similarity: Similarity::Cosine,
         };
 
         match init_api(cfg) {
@@ -79,6 +81,7 @@ impl DatabaseManager {
             index_type: IndexType::Flat,
             data_path: path.clone(),
             dimension: 512,
+            similarity: Similarity::Cosine,
         };
 
         match init_api(cfg) {

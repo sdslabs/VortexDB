@@ -1,6 +1,6 @@
 // Rewrite needed
 
-use crate::StorageEngine;
+use crate::{StorageEngine, VectorPage};
 use bincode::{deserialize, serialize};
 use defs::{DbError, DenseVector, Payload, Point, PointId};
 use rocksdb::{Error, Options, DB};
@@ -122,11 +122,7 @@ impl StorageEngine for RocksDbStorage {
         Ok(value.vector)
     }
 
-    fn list_vectors(
-        &self,
-        offset: PointId,
-        limit: usize,
-    ) -> Result<Option<(Vec<(PointId, DenseVector)>, PointId)>, DbError> {
+    fn list_vectors(&self, offset: PointId, limit: usize) -> Result<Option<VectorPage>, DbError> {
         if limit < 1 {
             return Ok(None);
         }

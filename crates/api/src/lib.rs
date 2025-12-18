@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 use index::flat::FlatIndex;
 use index::{IndexType, VectorIndex};
 use storage::rocks_db::RocksDbStorage;
-use storage::{StorageEngine, StorageType};
+use storage::{StorageEngine, StorageType, VectorPage};
 
 use uuid::Uuid;
 
@@ -101,11 +101,7 @@ impl VectorDb {
         Ok(vectors)
     }
 
-    pub fn list(
-        &self,
-        offset: PointId,
-        limit: usize,
-    ) -> Result<Option<(Vec<(PointId, DenseVector)>, PointId)>, DbError> {
+    pub fn list(&self, offset: PointId, limit: usize) -> Result<Option<VectorPage>, DbError> {
         self.storage.list_vectors(offset, limit)
     }
 

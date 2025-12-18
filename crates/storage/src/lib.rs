@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 use crate::rocks_db::RocksDbStorage;
 
+pub type VectorPage = (Vec<(PointId, DenseVector)>, PointId);
+
 pub trait StorageEngine: Send + Sync {
     fn insert_point(
         &self,
@@ -15,11 +17,7 @@ pub trait StorageEngine: Send + Sync {
     fn get_payload(&self, id: PointId) -> Result<Option<Payload>, DbError>;
     fn delete_point(&self, id: PointId) -> Result<(), DbError>;
     fn contains_point(&self, id: PointId) -> Result<bool, DbError>;
-    fn list_vectors(
-        &self,
-        offset: PointId,
-        limit: usize,
-    ) -> Result<Option<(Vec<(PointId, DenseVector)>, PointId)>, DbError>;
+    fn list_vectors(&self, offset: PointId, limit: usize) -> Result<Option<VectorPage>, DbError>;
 }
 
 pub mod in_memory;

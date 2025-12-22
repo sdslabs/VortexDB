@@ -1,4 +1,3 @@
-pub mod config;
 pub mod handler;
 
 use api::VectorDb;
@@ -6,7 +5,10 @@ use axum::{
     Router,
     routing::{get, post},
 };
+use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::net::TcpListener;
+use tracing::info;
 
 use handler::{
     delete_point_handler, get_point_handler, health_handler, insert_point_handler, root_handler,
@@ -19,8 +21,6 @@ pub struct AppState {
 }
 
 /// Creates the HTTP router with all VectorDB routes.
-/// This can be used by both the standalone http_server binary
-/// and the unified server binary.
 pub fn create_router(db: Arc<VectorDb>) -> Router {
     let app_state = AppState { db };
     Router::new()
@@ -33,4 +33,16 @@ pub fn create_router(db: Arc<VectorDb>) -> Router {
         )
         .route("/points/search", post(search_points_handler))
         .with_state(app_state)
+}
+
+/// Runs the HTTP server on the specified address.
+pub async fn run_http_server(
+    db: Arc<VectorDb>,
+    addr: SocketAddr,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let app = create_router(db);
+    let listener = TcpListener::bind(addr).await?;
+    info!("HTTP server listening on http://{}", addr);
+    axum::serve(listener, app.into_make_service()).await?;
+    Ok(())
 }

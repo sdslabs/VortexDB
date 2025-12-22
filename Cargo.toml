@@ -5,9 +5,9 @@ members = [
     "crates/storage",
     "crates/index",
     "crates/server",
-    "crates/http_server",
+    "crates/http",
     "crates/tui",
-    "crates/grpc_server",
+    "crates/grpc",
 ]
 
 # You can define shared dependencies for all crates here

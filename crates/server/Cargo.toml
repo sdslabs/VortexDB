@@ -30,10 +30,13 @@ api = { path = "../api" }
 defs = { path = "../defs" }
 index = { path = "../index" }
 storage = { path = "../storage" }
-grpc_server = { path = "../grpc_server" }
-http_server = { path = "../http_server" }
+grpc = { path = "../grpc" }
+http = { path = "../http" }
 
 # Other
 tempfile = "3.23.0"
 uuid.workspace = true
 tokio-stream = "0.1.17"
+
+[dev-dependencies]
+tonic = "0.14.2"

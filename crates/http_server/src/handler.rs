@@ -24,6 +24,10 @@ pub async fn root_handler() -> &'static str {
     "Vector Database server is running!"
 }
 
+pub async fn health_handler() -> &'static str {
+    "OK"
+}
+
 pub async fn insert_point_handler(
     State(app_state): State<AppState>,
     Json(request): Json<InsertRequest>,

@@ -131,6 +131,7 @@ impl VectorDb {
     }
 }
 
+#[derive(Debug)]
 pub struct DbConfig {
     pub storage_type: StorageType,
     pub index_type: IndexType,

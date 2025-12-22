@@ -1,6 +1,39 @@
 [package]
 name = "server"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP server (Axum)
+axum = "0.8"
+
+# gRPC server (Tonic)
+tonic = "0.14.2"
+prost = "0.14.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Config
+dotenv = "0.15.0"
+
+# Local crates
+api = { path = "../api" }
+defs = { path = "../defs" }
+index = { path = "../index" }
+storage = { path = "../storage" }
+grpc_server = { path = "../grpc_server" }
+http_server = { path = "../http_server" }
+
+# Other
+tempfile = "3.23.0"
+uuid.workspace = true
+tokio-stream = "0.1.17"

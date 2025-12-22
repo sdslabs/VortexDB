@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::interceptors;
 use crate::service::vectordb::{ContentType, Uuid};
@@ -18,8 +19,14 @@ pub mod vectordb {
 }
 
 pub struct VectorDBService {
-    pub vector_db: api::VectorDb,
+    pub vector_db: Arc<api::VectorDb>,
     pub logging: bool,
+}
+
+impl VectorDBService {
+    pub fn new(vector_db: Arc<api::VectorDb>, logging: bool) -> Self {
+        Self { vector_db, logging }
+    }
 }
 
 #[tonic::async_trait]

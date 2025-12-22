@@ -2,6 +2,7 @@ use grpc_server::config::GRPCServerConfig;
 use grpc_server::service::{VectorDBService, run_server};
 use grpc_server::utils::ServerEndpoint;
 use std::panic;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,10 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .inspect_err(|err| panic!("Failed to Init API: {:?}", err))
         .unwrap();
 
-    let vector_db_service = VectorDBService {
-        vector_db: vector_db_api,
-        logging: config.logging,
-    };
+    let vector_db_service = VectorDBService::new(Arc::new(vector_db_api), config.logging);
     run_server(
         vector_db_service,
         ServerEndpoint::Address(config.addr),

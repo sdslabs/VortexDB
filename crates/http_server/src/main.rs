@@ -1,41 +1,15 @@
 mod config;
-mod handler;
 
-use api::{DbConfig, VectorDb, init_api};
-use axum::{
-    Router,
-    routing::{get, post},
-};
+use api::{DbConfig, init_api};
 use config::Config;
 use defs::{AppError, ServerError};
+use http_server::create_router;
 use index::IndexType;
+use std::sync::Arc;
 use storage::StorageType;
 use tokio::net::TcpListener;
 use tracing::info;
 
-use handler::{
-    delete_point_handler, get_point_handler, insert_point_handler, root_handler,
-    search_points_handler,
-};
-use std::sync::Arc;
-
-#[derive(Clone)]
-struct AppState {
-    db: Arc<VectorDb>,
-}
-
-pub fn app(db: Arc<VectorDb>) -> Router {
-    let app_state = AppState { db };
-    Router::new()
-        .route("/", get(root_handler))
-        .route("/points", post(insert_point_handler))
-        .route(
-            "/points/{id}",
-            get(get_point_handler).delete(delete_point_handler),
-        )
-        .route("/points/search", post(search_points_handler))
-        .with_state(app_state)
-}
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     tracing_subscriber::fmt::init();
@@ -61,7 +35,7 @@ async fn main() -> Result<(), AppError> {
     // axum init
     info!(" Server listening on http://{}", config.listen_addr);
 
-    let app = app(Arc::new(db));
+    let app = create_router(Arc::new(db));
 
     let listener = TcpListener::bind(config.listen_addr)
         .await
@@ -76,10 +50,11 @@ async fn main() -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handler::SearchResponse;
+    use api::VectorDb;
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use defs::{DenseVector, Point};
+    use http_server::handler::{self, SearchResponse};
     use serde_json::json;
     use tempfile::tempdir;
 
@@ -96,7 +71,7 @@ mod tests {
 
     fn setup_test_server() -> TestServer {
         let db = Arc::new(create_test_db());
-        let test_app = app(db);
+        let test_app = create_router(db);
         TestServer::new(test_app).unwrap()
     }
 

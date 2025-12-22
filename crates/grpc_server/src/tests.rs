@@ -8,6 +8,7 @@ use api;
 use api::DbConfig;
 use index::IndexType;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use storage::StorageType;
 use tempfile::tempdir;
 use tokio;
@@ -44,10 +45,7 @@ async fn start_test_server() -> Result<SocketAddr, Box<dyn std::error::Error>> {
 
     let vector_db_api = api::init_api(config.db_config)?;
 
-    let vector_db_service = VectorDBService {
-        vector_db: vector_db_api,
-        logging: config.logging,
-    };
+    let vector_db_service = VectorDBService::new(Arc::new(vector_db_api), config.logging);
 
     let listener = tokio::net::TcpListener::bind(config.addr).await?;
     let listener_addr = listener.local_addr()?;

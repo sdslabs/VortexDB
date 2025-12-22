@@ -2101,6 +2101,26 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.0"
+dependencies = [
+ "api",
+ "axum",
+ "defs",
+ "dotenv",
+ "grpc_server",
+ "http_server",
+ "index",
+ "prost",
+ "serde",
+ "serde_json",
+ "storage",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
 
 [[package]]
 name = "sharded-slab"

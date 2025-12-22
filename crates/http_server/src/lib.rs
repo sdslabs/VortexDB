@@ -9,8 +9,8 @@ use axum::{
 use std::sync::Arc;
 
 use handler::{
-    delete_point_handler, get_point_handler, insert_point_handler, root_handler,
-    search_points_handler, health_handler,
+    delete_point_handler, get_point_handler, health_handler, insert_point_handler, root_handler,
+    search_points_handler,
 };
 
 #[derive(Clone)]
@@ -19,7 +19,6 @@ pub struct AppState {
 }
 
 /// Creates the HTTP router with all VectorDB routes.
-/// 
 /// This can be used by both the standalone http_server binary
 /// and the unified server binary.
 pub fn create_router(db: Arc<VectorDb>) -> Router {

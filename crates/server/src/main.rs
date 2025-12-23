@@ -5,10 +5,13 @@ use std::sync::Arc;
 use config::ServerConfig;
 use grpc::run_grpc_server;
 use http::run_http_server;
+use tokio::signal;
 use tracing::{Level, event, info};
 
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), BoxError> {
     tracing_subscriber::fmt::init();
 
     info!("Starting VortexDB unified server...");
@@ -47,9 +50,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tokio::spawn(async move { run_grpc_server(db, addr, password, logging).await })
     };
 
-    // Run servers concurrently
     if let Some(http) = http_handle {
         tokio::select! {
+            _ = shutdown_signal() => {
+                info!("Stopping servers");
+            }
             result = http => {
                 match result {
                     Err(e) => event!(Level::ERROR, "HTTP server task error: {}", e),
@@ -66,12 +71,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
     } else {
-        match grpc_handle.await {
-            Err(e) => event!(Level::ERROR, "gRPC server task error: {}", e),
-            Ok(Err(e)) => event!(Level::ERROR, "gRPC server error: {}", e),
-            Ok(Ok(())) => {}
+        tokio::select! {
+            _ = shutdown_signal() => {
+                info!("Stopping servers");
+            }
+            result = grpc_handle => {
+                match result {
+                    Err(e) => event!(Level::ERROR, "gRPC server task error: {}", e),
+                    Ok(Err(e)) => event!(Level::ERROR, "gRPC server error: {}", e),
+                    Ok(Ok(())) => {}
+                }
+            }
         }
     }
 
+    info!("Shutdown complete");
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = terminate => {}
+    }
 }

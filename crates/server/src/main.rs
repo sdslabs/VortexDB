@@ -6,7 +6,7 @@ use config::ServerConfig;
 use grpc::run_grpc_server;
 use http::run_http_server;
 use tokio::signal;
-use tracing::{Level, event, info};
+use tracing::{error, info};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -16,8 +16,8 @@ async fn main() -> Result<(), BoxError> {
 
     info!("Starting VortexDB unified server...");
 
-    let config = ServerConfig::load_config()
-        .inspect_err(|err| event!(Level::ERROR, "Failed to load config: {}", err))?;
+    let config =
+        ServerConfig::load_config().inspect_err(|err| error!("Failed to load config: {}", err))?;
 
     info!("Configuration loaded successfully");
     if !config.disable_http {
@@ -26,7 +26,7 @@ async fn main() -> Result<(), BoxError> {
     info!("gRPC server will listen on: {}", config.grpc_addr);
 
     let vector_db = api::init_api(config.db_config)
-        .inspect_err(|err| event!(Level::ERROR, "Failed to init API: {:?}", err))?;
+        .inspect_err(|err| error!("Failed to init API: {:?}", err))?;
 
     let shared_db = Arc::new(vector_db);
     info!("VectorDb initialized successfully");
@@ -57,15 +57,15 @@ async fn main() -> Result<(), BoxError> {
             }
             result = http => {
                 match result {
-                    Err(e) => event!(Level::ERROR, "HTTP server task error: {}", e),
-                    Ok(Err(e)) => event!(Level::ERROR, "HTTP server error: {}", e),
+                    Err(e) => error!("HTTP server task error: {}", e),
+                    Ok(Err(e)) => error!("HTTP server error: {}", e),
                     Ok(Ok(())) => {}
                 }
             }
             result = grpc_handle => {
                 match result {
-                    Err(e) => event!(Level::ERROR, "gRPC server task error: {}", e),
-                    Ok(Err(e)) => event!(Level::ERROR, "gRPC server error: {}", e),
+                    Err(e) => error!("gRPC server task error: {}", e),
+                    Ok(Err(e)) => error!("gRPC server error: {}", e),
                     Ok(Ok(())) => {}
                 }
             }
@@ -77,8 +77,8 @@ async fn main() -> Result<(), BoxError> {
             }
             result = grpc_handle => {
                 match result {
-                    Err(e) => event!(Level::ERROR, "gRPC server task error: {}", e),
-                    Ok(Err(e)) => event!(Level::ERROR, "gRPC server error: {}", e),
+                    Err(e) => error!("gRPC server task error: {}", e),
+                    Ok(Err(e)) => error!("gRPC server error: {}", e),
                     Ok(Ok(())) => {}
                 }
             }

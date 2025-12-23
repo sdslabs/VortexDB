@@ -3,12 +3,11 @@ mod config;
 use std::sync::Arc;
 
 use config::ServerConfig;
+use defs::BoxError;
 use grpc::run_grpc_server;
 use http::run_http_server;
 use tokio::signal;
 use tracing::{error, info};
-
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {

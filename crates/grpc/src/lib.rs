@@ -5,6 +5,7 @@ pub mod service;
 pub mod utils;
 
 use api::VectorDb;
+use defs::BoxError;
 use service::{VectorDBService, run_server};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ pub async fn run_grpc_server(
     addr: SocketAddr,
     root_password: String,
     logging: bool,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), BoxError> {
     let vector_db_service = VectorDBService::new(db, logging);
     run_server(
         vector_db_service,
@@ -24,7 +25,7 @@ pub async fn run_grpc_server(
         root_password,
     )
     .await
-    .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })
+    .map_err(|e| -> BoxError { e.to_string().into() })
 }
 
 #[cfg(test)]

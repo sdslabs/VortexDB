@@ -29,3 +29,6 @@ impl std::fmt::Display for DbError {
 }
 
 impl std::error::Error for DbError {}
+
+// Error type for server
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;

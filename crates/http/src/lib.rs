@@ -5,6 +5,7 @@ use axum::{
     Router,
     routing::{get, post},
 };
+use defs::BoxError;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -36,10 +37,7 @@ pub fn create_router(db: Arc<VectorDb>) -> Router {
 }
 
 /// Runs the HTTP server on the specified address.
-pub async fn run_http_server(
-    db: Arc<VectorDb>,
-    addr: SocketAddr,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn run_http_server(db: Arc<VectorDb>, addr: SocketAddr) -> Result<(), BoxError> {
     let app = create_router(db);
     let listener = TcpListener::bind(addr).await?;
     info!("HTTP server listening on http://{}", addr);

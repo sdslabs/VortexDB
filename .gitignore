@@ -6,3 +6,4 @@
 /data/
 .TODO
 /databases
+.env

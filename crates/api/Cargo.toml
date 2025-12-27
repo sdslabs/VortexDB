@@ -1,12 +1,14 @@
+# crates/api/Cargo.toml
+
 [package]
-name="api"
-version = "0.1.0"
-edition = "2021"
-license = "MIT"
+name = "api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-defs = { path = "../defs" }
-index = { path = "../index" }
-storage = { path = "../storage" }
-tempfile = "3.20.0"
+defs.workspace = true
+index.workspace = true
+storage.workspace = true
+tempfile.workspace = true
 uuid.workspace = true

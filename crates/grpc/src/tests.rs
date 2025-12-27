@@ -1,16 +1,14 @@
-use crate::config::GRPCServerConfig;
 use crate::constants::AUTHORIZATION_HEADER_KEY;
 use crate::service::vectordb::vector_db_client::VectorDbClient;
 use crate::service::vectordb::{DenseVector, InsertVectorRequest, Payload, PointId, SearchRequest};
 use crate::service::{VectorDBService, run_server};
 use crate::utils::ServerEndpoint;
-use api;
 use api::DbConfig;
 use index::IndexType;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use storage::StorageType;
 use tempfile::tempdir;
-use tokio;
 use tonic::transport::Channel;
 
 // Inspired from https://github.com/hyperium/tonic/discussions/924#discussioncomment-9854088
@@ -35,28 +33,18 @@ async fn start_test_server() -> Result<SocketAddr, Box<dyn std::error::Error>> {
         dimension: 3,
     };
 
-    let config = GRPCServerConfig {
-        addr: "127.0.0.1:0".parse()?,
-        root_password: TEST_AUTH_BEARER_TOKEN.to_string(),
-        logging: false,
-        db_config,
-    };
+    let vector_db_api = api::init_api(db_config)?;
 
-    let vector_db_api = api::init_api(config.db_config)?;
+    let vector_db_service = VectorDBService::new(Arc::new(vector_db_api), false);
 
-    let vector_db_service = VectorDBService {
-        vector_db: vector_db_api,
-        logging: config.logging,
-    };
-
-    let listener = tokio::net::TcpListener::bind(config.addr).await?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let listener_addr = listener.local_addr()?;
 
     tokio::spawn(async move {
         let _ = run_server(
             vector_db_service,
             ServerEndpoint::Listener(listener),
-            config.root_password,
+            TEST_AUTH_BEARER_TOKEN.to_string(),
         )
         .await
         .inspect_err(|err| panic!("Could not start test server : {:?}", err));

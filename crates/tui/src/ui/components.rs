@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::Alignment,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Frame,
 };
 
 pub struct PageTitle {

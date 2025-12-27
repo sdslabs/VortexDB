@@ -324,14 +324,14 @@ fn execute_modal_action(app: &mut App) -> io::Result<()> {
             app.vector_list_selected_index = 0;
 
             for id in ids.into_iter() {
-                if let Some(point) = db.get(id).map_err(to_io)? {
-                    if let Some(vector) = point.vector {
-                        app.vector_list_items.push(VectorListItem {
-                            id: point.id,
-                            vector,
-                            payload: point.payload,
-                        });
-                    }
+                if let Some(point) = db.get(id).map_err(to_io)?
+                    && let Some(vector) = point.vector
+                {
+                    app.vector_list_items.push(VectorListItem {
+                        id: point.id,
+                        vector,
+                        payload: point.payload,
+                    });
                 }
             }
 

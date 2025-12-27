@@ -23,6 +23,7 @@ pub trait StorageEngine: Send + Sync {
 pub mod in_memory;
 pub mod rocks_db;
 
+#[derive(Debug, Clone, Copy)]
 pub enum StorageType {
     InMemory,
     RocksDb,

@@ -1,21 +1,22 @@
+# crates/tui/Cargo.toml
+
 [package]
 name = "tui"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-color-eyre = "0.6.5"
-ratatui = "0.26"
-crossterm = "0.27"
-tokio.workspace = true
+api.workspace = true
+color-eyre.workspace = true
+crossterm.workspace = true
+defs.workspace = true
+dotenv.workspace = true
+index.workspace = true
+ratatui.workspace = true
+reqwest.workspace = true
 serde.workspace = true
-anyhow.workspace = true
-uuid.workspace = true
-chrono = { version = "0.4", features = ["serde"] }
-defs = { path = "../defs" }
-storage = { path = "../storage" }
-index = { path = "../index" }
-api = { path = "../api" }
 serde_json.workspace = true
-reqwest = { version = "0.12", features = ["json", "blocking", "multipart"] }
-dotenv = "0.15"
+storage.workspace = true
+tokio.workspace = true
+uuid.workspace = true

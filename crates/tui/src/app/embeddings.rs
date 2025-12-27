@@ -1,7 +1,7 @@
-use reqwest::blocking::{multipart, Client, Response};
 use reqwest::StatusCode;
-use serde::de::DeserializeOwned;
+use reqwest::blocking::{Client, Response, multipart};
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use std::env;
 use std::path::Path;
 use std::time::Duration;

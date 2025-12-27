@@ -58,6 +58,7 @@ pub fn distance(a: DenseVector, b: DenseVector, dist_type: Similarity) -> f32 {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum IndexType {
     Flat,
     KDTree,

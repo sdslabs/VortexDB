@@ -2,10 +2,10 @@
 
 [package]
 name = "index"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-
-defs = { path = "../defs" }
+defs.workspace = true
 uuid.workspace = true

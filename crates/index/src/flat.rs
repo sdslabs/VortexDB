@@ -1,6 +1,6 @@
 use defs::{DbError, DenseVector, DistanceOrderedVector, IndexedVector, PointId, Similarity};
 
-use crate::{distance, VectorIndex};
+use crate::{VectorIndex, distance};
 
 pub struct FlatIndex {
     index: Vec<IndexedVector>,

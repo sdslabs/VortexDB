@@ -3,7 +3,7 @@
 use crate::{StorageEngine, VectorPage};
 use bincode::{deserialize, serialize};
 use defs::{DbError, DenseVector, Payload, Point, PointId};
-use rocksdb::{Error, Options, DB};
+use rocksdb::{DB, Error, Options};
 use std::path::PathBuf;
 
 //TODO: Implement RocksDbStorage with necessary fields and implementations

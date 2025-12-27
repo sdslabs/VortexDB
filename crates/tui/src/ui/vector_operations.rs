@@ -1,12 +1,12 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, ListItem, Paragraph},
-    Frame,
 };
 
-use super::components::{common_instructions, create_instructions, OperationsList, PageTitle};
+use super::components::{OperationsList, PageTitle, common_instructions, create_instructions};
 use crate::app::App;
 
 const VECTOR_OPERATIONS: &[&str] = &[

@@ -1,6 +1,0 @@
-version: '3.4'
-services:
-  t2v-transformers:
-      image: semitechnologies/transformers-inference:distilbert-base-uncased-1.1.0
-      ports: 
-        - "8000:8080"

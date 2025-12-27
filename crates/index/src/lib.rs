@@ -2,7 +2,7 @@ use defs::{DbError, DenseVector, IndexedVector, PointId, Similarity};
 
 pub mod flat;
 
-pub trait VectorIndex {
+pub trait VectorIndex: Send + Sync {
     fn insert(&mut self, vector: IndexedVector) -> Result<(), DbError>;
 
     // Returns true if point id existed and is deleted, else returns false

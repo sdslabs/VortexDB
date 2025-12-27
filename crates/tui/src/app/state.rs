@@ -27,6 +27,7 @@ pub enum ModalType {
     ImageEmbedding,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct VectorListItem {
     pub id: Uuid,

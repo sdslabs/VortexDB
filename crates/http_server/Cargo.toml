@@ -1,0 +1,23 @@
+[package]
+name = "http_server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+tracing-subscriber = "0.3" # For logging
+tracing = "0.1"
+dotenvy = "0.15"
+
+# Add your local crates
+# tokio.workspace = true
+
+api = { path = "../api" }
+defs = { path = "../defs" }
+index = { path = "../index" }
+storage = { path = "../storage" }
+tempfile = "3.20.0"
+serde_json = "1.0.145"
+axum-test = "18.1.0"

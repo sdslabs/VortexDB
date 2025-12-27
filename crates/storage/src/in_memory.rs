@@ -1,4 +1,4 @@
-use crate::StorageEngine;
+use crate::{StorageEngine, VectorPage};
 use defs::{DbError, DenseVector, Payload, PointId};
 
 pub struct MemoryStorage {
@@ -38,11 +38,7 @@ impl StorageEngine for MemoryStorage {
     fn get_vector(&self, _id: PointId) -> Result<Option<DenseVector>, DbError> {
         Ok(None)
     }
-    fn list_vectors(
-        &self,
-        _offset: PointId,
-        _limit: usize,
-    ) -> Result<Option<(Vec<(PointId, DenseVector)>, PointId)>, DbError> {
+    fn list_vectors(&self, _offset: PointId, _limit: usize) -> Result<Option<VectorPage>, DbError> {
         Ok(None)
     }
 }

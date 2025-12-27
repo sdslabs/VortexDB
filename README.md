@@ -9,7 +9,7 @@
   <a href="https://discord.gg/dXkVEgTPu9"><img src="https://img.shields.io/discord/758961084337618944?style=flat-square&logo=discord&label=discord" alt="Discord"></a>
 </p>
 
-**VortexDB** - A high-performance vector database built from scratch in Rust. VortexDB is designed for efficient similarity search and can be used as the backbone for AI-powered applications.
+**VortexDB** - A high-performance vector database built from scratch in Rust 🦀. VortexDB is designed for efficient similarity search and can be used as the backbone for AI-powered applications.
 
 ---
 
@@ -17,13 +17,13 @@
 
 VortexDB is organized as a Rust workspace with modular crates for flexibility and maintainability.
 
-### Index (`crates/index`)
+### Indexers
 
 The indexing layer provides efficient vector similarity search with pluggable index implementations. VortexDB supports **Flat** indexing for brute-force exact search (ideal for smaller datasets), **KD-Tree** for space-partitioning in low-dimensional vectors, and **HNSW** (Hierarchical Navigable Small World) graphs for fast approximate nearest neighbor search on large-scale datasets.
 
 Supported distance metrics include Euclidean, Manhattan, Hamming, and Cosine similarity.
 
-### Storage (`crates/storage`)
+### Storage Engine
 
 The storage layer abstracts persistence with a `StorageEngine` trait, allowing different backends. **RocksDB** offers persistent, production-ready storage for real-world deployments.
 
@@ -31,7 +31,7 @@ The storage layer abstracts persistence with a `StorageEngine` trait, allowing d
 
 ## Clients
 
-### HTTP Server (`crates/http`)
+### HTTP Server
 
 RESTful API server built with [Axum](https://github.com/tokio-rs/axum):
 
@@ -44,13 +44,13 @@ DELETE /points/:id - Delete a point
 POST /points/search - Search for similar vectors
 ```
 
-### gRPC Server (`crates/grpc`)
+### gRPC Server
 
 High-performance gRPC server with Protocol Buffers. Features include:
 - Configurable logging
 - Full CRUD operations for vector points
 
-### TUI Client (`crates/tui`)
+### TUI Client
 
 Interactive terminal user interface built with [Ratatui](https://github.com/ratatui/ratatui):
 - Dashboard view for database overview

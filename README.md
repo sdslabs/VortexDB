@@ -5,11 +5,11 @@
 <p align="center">
   <a href="https://github.com/sdslabs/VortexDB/actions"><img src="https://img.shields.io/github/actions/workflow/status/sdslabs/VortexDB/rust.yml?branch=refactor&style=flat-square&label=build" alt="Build Status"></a>
   <a href="#"><img src="https://img.shields.io/badge/docs-coming%20soon-yellow?style=flat-square" alt="Docs"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License"></a>
   <a href="https://discord.gg/dXkVEgTPu9"><img src="https://img.shields.io/discord/758961084337618944?style=flat-square&logo=discord&label=discord" alt="Discord"></a>
 </p>
 
-**VortexDB** - A high-performance vector database built from scratch in Rust 🦀. VortexDB is designed for efficient similarity search and can be used as the backbone for AI-powered applications.
+**VortexDB** - A vector database built from scratch in Rust 🦀. VortexDB is designed for efficient similarity search and can be used as the backbone for AI-powered applications.
 
 ---
 
@@ -71,4 +71,4 @@ Interactive terminal user interface built with [Ratatui](https://github.com/rata
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.

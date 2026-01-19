@@ -1,6 +1,7 @@
+use super::helpers::{collect_active_vectors, is_unbalanced, should_rebuild_global};
 use super::types::{KDTreeNode, Neighbor};
 use crate::{VectorIndex, distance};
-use defs::{DbError, DenseVector, IndexedVector, PointId, Similarity};
+use defs::{DbError, DenseVector, IndexedVector, OrdF32, PointId, Similarity};
 use std::{
     cmp::Ordering,
     collections::{BinaryHeap, HashSet},
@@ -19,10 +20,6 @@ pub struct KDTree {
 }
 
 impl KDTree {
-    // Rebuild threshold
-    const BALANCE_THRESHOLD: f32 = 0.7;
-    const DELETE_REBUILD_RATIO: f32 = 0.25;
-
     // Build an empty index with no points
     pub fn build_empty(dim: usize) -> Self {
         KDTree {
@@ -106,6 +103,7 @@ impl KDTree {
             left,
             right,
             is_deleted: false,
+            axis,
             subtree_size: left_size + right_size + 1,
         })
     }
@@ -122,6 +120,7 @@ impl KDTree {
                 left: None,
                 right: None,
                 is_deleted: false,
+                axis: 0,
                 subtree_size: 1,
             }));
             return;
@@ -134,8 +133,8 @@ impl KDTree {
         let mut depth = 0;
 
         while let Some(node_box) = current_link {
-            let axis = depth % dim;
             let current_node = node_box.as_mut();
+            let axis = current_node.axis;
 
             current_node.subtree_size += 1;
 
@@ -159,39 +158,13 @@ impl KDTree {
             left: None,
             right: None,
             is_deleted: false,
+            axis: depth % dim,
             subtree_size: 1,
         });
 
         *current_link = Some(new_node);
 
         self.check_and_rebalance(&path);
-    }
-
-    // Rebuild helper methods
-    fn is_unbalanced(node: &KDTreeNode) -> bool {
-        let left_size = node.left.as_ref().map_or(0, |n| n.subtree_size);
-        let right_size = node.right.as_ref().map_or(0, |n| n.subtree_size);
-        let max_child = left_size.max(right_size);
-
-        max_child as f32 > Self::BALANCE_THRESHOLD * node.subtree_size as f32
-    }
-
-    fn collect_recursive(node: KDTreeNode, result: &mut Vec<IndexedVector>) {
-        if !node.is_deleted {
-            result.push(node.indexed_vector);
-        }
-        if let Some(left) = node.left {
-            Self::collect_recursive(*left, result);
-        }
-        if let Some(right) = node.right {
-            Self::collect_recursive(*right, result);
-        }
-    }
-
-    fn collect_active_vectors(node: KDTreeNode) -> Vec<IndexedVector> {
-        let mut result = Vec::with_capacity(node.subtree_size);
-        Self::collect_recursive(node, &mut result);
-        result
     }
 
     fn rebuild_at_depth(&mut self, path: &[(usize, bool)], target_depth: usize) {
@@ -202,7 +175,7 @@ impl KDTree {
             // Rebuild root
             if let Some(root) = self.root.take() {
                 let old_size = root.subtree_size;
-                let mut vectors = Self::collect_active_vectors(*root);
+                let mut vectors = collect_active_vectors(*root);
                 let new_size = vectors.len();
                 if !vectors.is_empty() {
                     self.root = Some(Self::build_recursive(&mut vectors, 0, dim));
@@ -226,7 +199,7 @@ impl KDTree {
             // Rebuild tree at current link
             if let Some(subtree_root) = current_link.take() {
                 let old_size = subtree_root.subtree_size;
-                let mut vectors = Self::collect_active_vectors(*subtree_root);
+                let mut vectors = collect_active_vectors(*subtree_root);
                 let new_size = vectors.len();
 
                 if !vectors.is_empty() {
@@ -273,7 +246,7 @@ impl KDTree {
 
         // Check root first (depth 0)
         if let Some(node) = current
-            && Self::is_unbalanced(node)
+            && is_unbalanced(node)
         {
             unbalanced_depth = Some(0);
         }
@@ -294,7 +267,7 @@ impl KDTree {
 
                 // Check the child node we just moved to (at depth idx + 1)
                 if let Some(child) = current
-                    && Self::is_unbalanced(child)
+                    && is_unbalanced(child)
                 {
                     unbalanced_depth = Some(idx + 1);
                     break;
@@ -307,11 +280,6 @@ impl KDTree {
         }
     }
 
-    fn should_rebuild_global(&self) -> bool {
-        self.total_nodes > 0
-            && (self.deleted_count as f32 / self.total_nodes as f32) > Self::DELETE_REBUILD_RATIO
-    }
-
     // Returns true if point found and deleted, else false
     pub fn delete_point(&mut self, point_id: &PointId) -> bool {
         if self.point_ids.contains(point_id) {
@@ -321,10 +289,10 @@ impl KDTree {
                 self.point_ids.remove(point_id);
             }
 
-            if Self::should_rebuild_global(self)
+            if should_rebuild_global(self.total_nodes, self.deleted_count)
                 && let Some(root) = self.root.take()
             {
-                let mut vectors = Self::collect_active_vectors(*root);
+                let mut vectors = collect_active_vectors(*root);
                 if !vectors.is_empty() {
                     self.root = Some(Self::build_recursive(&mut vectors, 0, self.dim));
                 }
@@ -372,14 +340,13 @@ impl KDTree {
             &query_vector,
             k,
             &mut best_neighbours,
-            0,
             dist_type,
         );
 
         best_neighbours
             .into_sorted_vec()
             .iter()
-            .map(|neighbor| (neighbor.id, neighbor.distance))
+            .map(|neighbor| (neighbor.id, neighbor.distance.into_inner()))
             .collect()
     }
 
@@ -389,12 +356,11 @@ impl KDTree {
         query_vector: &DenseVector,
         k: usize,
         heap: &mut BinaryHeap<Neighbor>,
-        depth: usize,
         dist_type: Similarity,
     ) {
         // Base case is that we hit a leaf node don't do anything
         if let Some(node) = node_opt {
-            let axis = depth % self.dim;
+            let axis = node.axis;
 
             let (near_side, far_side) = if query_vector[axis] <= node.indexed_vector.vector[axis] {
                 (&node.left, &node.right)
@@ -403,21 +369,21 @@ impl KDTree {
             };
 
             // Recurse on near side first
-            self.search_recursive(near_side, query_vector, k, heap, depth + 1, dist_type);
+            self.search_recursive(near_side, query_vector, k, heap, dist_type);
 
             if !node.is_deleted {
                 // TODO: Possible overhead, here heap stores sqrt euclidean distance, we can eliminate that by storing squared distances in case of euclidean
                 let distance = distance(query_vector, &node.indexed_vector.vector, dist_type);
                 if heap.len() < k {
                     heap.push(Neighbor {
+                        distance: OrdF32::new(distance),
                         id: node.indexed_vector.id,
-                        distance,
                     });
-                } else if distance < heap.peek().unwrap().distance {
+                } else if distance < heap.peek().unwrap().distance.into_inner() {
                     heap.pop();
                     heap.push(Neighbor {
+                        distance: OrdF32::new(distance),
                         id: node.indexed_vector.id,
-                        distance,
                     });
                 }
             }
@@ -428,13 +394,13 @@ impl KDTree {
             let axis_diff = (query_vector[axis] - node.indexed_vector.vector[axis]).abs();
             let should_search_far = match dist_type {
                 Similarity::Euclidean | Similarity::Manhattan => {
-                    heap.len() < k || axis_diff <= heap.peek().unwrap().distance
+                    heap.len() < k || axis_diff <= heap.peek().unwrap().distance.into_inner()
                 }
                 _ => true, // Cosine/Hamming - no effective pruning, always search
             };
 
             if should_search_far {
-                self.search_recursive(far_side, query_vector, k, heap, depth + 1, dist_type);
+                self.search_recursive(far_side, query_vector, k, heap, dist_type);
             }
         }
     }

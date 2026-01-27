@@ -1,8 +1,8 @@
 use defs::{DbError, DenseVector, IndexedVector, PointId, Similarity};
 
 pub mod flat;
-pub mod kd_tree;
 pub mod hnsw;
+pub mod kd_tree;
 
 pub trait VectorIndex: Send + Sync {
     fn insert(&mut self, vector: IndexedVector) -> Result<(), DbError>;

@@ -1,4 +1,6 @@
 use std::io;
+
+use crate::{Dimension, PointId};
 #[derive(Debug, PartialEq, Eq)]
 pub enum DbError {
     ParseError,
@@ -10,6 +12,9 @@ pub enum DbError {
     IndexInitError, //TODO: Change this
     UnsupportedSimilarity,
     DimensionMismatch,
+    InvalidDimension { expected: Dimension, got: Dimension },
+    PointAlreadyExists { id: PointId },
+    PointNotFound { id: PointId },
 }
 
 #[derive(Debug)]

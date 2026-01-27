@@ -1,4 +1,5 @@
 use api::DbConfig;
+use defs::Similarity;
 use dotenv::dotenv;
 use index::IndexType;
 use std::env;
@@ -6,7 +7,6 @@ use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use storage::StorageType;
-use tempfile::tempdir;
 use tracing::{Level, event};
 
 const DEFAULT_HTTP_PORT: &str = "3000";
@@ -146,11 +146,7 @@ impl ServerConfig {
             fs::create_dir_all(&path).map_err(|_| ConfigError::InvalidDataPath)?;
             path
         } else {
-            let tempbuf = tempdir()
-                .map_err(|e| ConfigError::IoError(e.to_string()))?
-                .path()
-                .to_path_buf()
-                .join("vectordb");
+            let tempbuf = env::temp_dir().join("vectordb");
             fs::create_dir_all(&tempbuf).map_err(|e| ConfigError::IoError(e.to_string()))?;
             event!(
                 Level::WARN,
@@ -172,11 +168,34 @@ impl ServerConfig {
             .parse()
             .unwrap_or(false);
 
+        // Similarity metric
+        let similarity: Similarity = match env::var("SIMILARITY") {
+            Ok(val) => match val.to_lowercase().as_str() {
+                "cosine" => Similarity::Cosine,
+                "euclidean" => Similarity::Euclidean,
+                "manhattan" => Similarity::Manhattan,
+                "hamming" => Similarity::Hamming,
+                other => {
+                    event!(
+                        Level::WARN,
+                        "Unknown SIMILARITY '{}', defaulting to cosine",
+                        other
+                    );
+                    Similarity::Cosine
+                }
+            },
+            Err(_) => {
+                event!(Level::WARN, "SIMILARITY not defined, defaulting to cosine");
+                Similarity::Cosine
+            }
+        };
+
         let db_config = DbConfig {
             storage_type,
             index_type,
             data_path,
             dimension,
+            similarity,
         };
 
         Ok(ServerConfig {

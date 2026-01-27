@@ -160,26 +160,24 @@ mod tests {
     use defs::ContentType;
     use uuid::Uuid;
 
-    use tempfile::tempdir;
+    use tempfile::{TempDir, tempdir};
 
-    fn create_test_db() -> (RocksDbStorage, String) {
+    fn create_test_db() -> (RocksDbStorage, TempDir) {
         let temp_dir = tempdir().unwrap();
-        let temp_dir_path = temp_dir.path().to_str().unwrap().to_string();
 
-        let db = RocksDbStorage::new(temp_dir_path.clone()).expect("Failed to create RocksDB");
-        (db, temp_dir_path)
+        let db = RocksDbStorage::new(temp_dir.path()).expect("Failed to create RocksDB");
+        (db, temp_dir)
     }
 
     #[test]
     fn test_new_rocksdb_storage() {
-        let (db, path) = create_test_db();
-        assert_eq!(db.get_current_path(), PathBuf::from(path.clone()));
-        std::fs::remove_dir_all(path).unwrap_or_default();
+        let (db, temp_dir) = create_test_db();
+        assert_eq!(db.get_current_path(), PathBuf::from(temp_dir.path()));
     }
 
     #[test]
     fn test_insert_and_get_vector() {
-        let (db, path) = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let id = Uuid::new_v4();
         let vector = Some(vec![0.1, 0.2, 0.3]);
         let payload = Some(Payload {
@@ -190,13 +188,11 @@ mod tests {
         assert!(db.insert_point(id, vector.clone(), payload).is_ok());
         let result = db.get_vector(id).unwrap();
         assert_eq!(result, vector);
-
-        std::fs::remove_dir_all(path).unwrap_or_default();
     }
 
     #[test]
     fn test_insert_and_get_payload() {
-        let (db, path) = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let id = Uuid::new_v4();
         let payload = Some(Payload {
             content_type: ContentType::Text,
@@ -212,13 +208,11 @@ mod tests {
             content: "Test".to_string(),
         });
         assert_eq!(result, expected);
-
-        std::fs::remove_dir_all(path).unwrap_or_default();
     }
 
     #[test]
     fn test_contains_point() {
-        let (db, path) = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let id = Uuid::new_v4();
         let payload = Some(Payload {
             content_type: ContentType::Text,
@@ -231,13 +225,11 @@ mod tests {
         db.insert_point(id, vector, payload).unwrap();
 
         assert!(db.contains_point(id).unwrap());
-
-        std::fs::remove_dir_all(path).unwrap_or_default();
     }
 
     #[test]
     fn test_delete_point() {
-        let (db, path) = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let id = Uuid::new_v4();
         let payload = Some(Payload {
             content_type: ContentType::Text,
@@ -255,27 +247,21 @@ mod tests {
         assert!(!db.contains_point(id).unwrap());
         assert_eq!(db.get_vector(id).unwrap(), None);
         assert_eq!(db.get_payload(id).unwrap(), None);
-
-        std::fs::remove_dir_all(path).unwrap_or_default();
     }
 
     #[test]
     fn test_get_nonexistent_vector() {
-        let (db, path) = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let id = Uuid::new_v4();
 
         assert_eq!(db.get_vector(id).unwrap(), None);
-
-        std::fs::remove_dir_all(path).unwrap_or_default();
     }
 
     #[test]
     fn test_get_nonexistent_payload() {
-        let (db, path) = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let id = Uuid::new_v4();
 
         assert_eq!(db.get_payload(id).unwrap(), None);
-
-        std::fs::remove_dir_all(path).unwrap_or_default();
     }
 }

@@ -26,6 +26,7 @@ dotenv = "0.15.0"
 dotenvy = "0.15"
 prost = "0.14.1"
 prost-types = "0.14.1"
+rand = "0.9.2"
 ratatui = "0.26"
 reqwest = { version = "0.12", features = ["json", "blocking", "multipart"] }
 rocksdb = "0.21.0"

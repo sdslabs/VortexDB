@@ -2,6 +2,7 @@ use defs::{DbError, DenseVector, IndexedVector, PointId, Similarity};
 
 pub mod flat;
 pub mod kd_tree;
+pub mod hnsw;
 
 pub trait VectorIndex: Send + Sync {
     fn insert(&mut self, vector: IndexedVector) -> Result<(), DbError>;
@@ -54,7 +55,7 @@ pub fn distance(a: &DenseVector, b: &DenseVector, dist_type: Similarity) -> f32 
             let q = q_score.iter().sum::<f32>().sqrt();
             let r_score: Vec<f32> = b.iter().map(|&n| n * n).collect();
             let r = r_score.iter().sum::<f32>().sqrt();
-            1.0 - (p / (q * r))
+            1.0 - p / (q * r)
         }
     }
 }

@@ -1,6 +1,7 @@
-use defs::{DbError, IndexedVector, Similarity};
+use defs::{DbError, Dimension, IndexedVector, Similarity};
 
 use defs::{DenseVector, Payload, Point, PointId};
+use index::hnsw::HnswIndex;
 use std::path::PathBuf;
 // use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -136,7 +137,8 @@ pub struct DbConfig {
     pub storage_type: StorageType,
     pub index_type: IndexType,
     pub data_path: PathBuf,
-    pub dimension: usize,
+    pub dimension: Dimension,
+    pub similarity: Similarity,
 }
 
 pub fn init_api(config: DbConfig) -> Result<VectorDb, DbError> {
@@ -149,6 +151,10 @@ pub fn init_api(config: DbConfig) -> Result<VectorDb, DbError> {
     // Initialize the vector index
     let index: Arc<RwLock<dyn VectorIndex>> = match config.index_type {
         IndexType::Flat => Arc::new(RwLock::new(FlatIndex::new())),
+        IndexType::HNSW => Arc::new(RwLock::new(HnswIndex::new(
+            config.similarity,
+            config.dimension,
+        ))),
         _ => Arc::new(RwLock::new(FlatIndex::new())),
     };
 
@@ -168,23 +174,24 @@ mod tests {
 
     use super::*;
     use defs::ContentType;
-    use tempfile::tempdir;
+    use tempfile::{TempDir, tempdir};
 
     // Helper function to create a test database
-    fn create_test_db() -> VectorDb {
+    fn create_test_db() -> (VectorDb, TempDir) {
         let temp_dir = tempdir().unwrap();
         let config = DbConfig {
             storage_type: StorageType::RocksDb,
             index_type: IndexType::Flat,
             data_path: temp_dir.path().to_path_buf(),
             dimension: 3,
+            similarity: Similarity::Cosine,
         };
-        init_api(config).unwrap()
+        (init_api(config).unwrap(), temp_dir)
     }
 
     #[test]
     fn test_insert_and_get() {
-        let db = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let vector = vec![1.0, 2.0, 3.0];
         let payload = Payload {
             content_type: ContentType::Text,
@@ -209,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_dimension_mismatch() {
-        let db = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let v1 = vec![1.0, 2.0, 3.0];
         let v2 = vec![1.0, 2.0];
         let payload = defs::Payload {
@@ -228,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_delete() {
-        let db = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         let vector = vec![1.0, 2.0, 3.0];
         let payload = Payload {
             content_type: ContentType::Text,
@@ -251,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_search() {
-        let db = create_test_db();
+        let (db, _temp_dir) = create_test_db();
 
         // Insert some points
         let vectors = vec![
@@ -280,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_search_limit() {
-        let db = create_test_db();
+        let (db, _temp_dir) = create_test_db();
 
         // Insert 5 points
         let mut ids = Vec::new();
@@ -307,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_empty_database() {
-        let db = create_test_db();
+        let (db, _temp_dir) = create_test_db();
 
         // Get non-existent point
         assert!(db.get(Uuid::new_v4()).unwrap().is_none());
@@ -319,7 +326,7 @@ mod tests {
 
     #[test]
     fn test_list_vectors() {
-        let db = create_test_db();
+        let (db, _temp_dir) = create_test_db();
         // insert some points
         let mut ids = Vec::new();
         for i in 0..10 {
@@ -350,7 +357,7 @@ mod tests {
 
     #[test]
     fn test_build_index() {
-        let db = create_test_db();
+        let (db, _temp_dir) = create_test_db();
 
         // insert some points
         for i in 0..10 {

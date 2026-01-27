@@ -1,14 +1,17 @@
 use crate::constants::AUTHORIZATION_HEADER_KEY;
 use crate::service::vectordb::vector_db_client::VectorDbClient;
-use crate::service::vectordb::{DenseVector, InsertVectorRequest, Payload, PointId, SearchRequest};
+use crate::service::vectordb::{
+    ContentType, DenseVector, InsertVectorRequest, Payload, PointId, SearchRequest,
+};
 use crate::service::{VectorDBService, run_server};
 use crate::utils::ServerEndpoint;
 use api::DbConfig;
+use defs::Similarity;
 use index::IndexType;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use storage::StorageType;
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 use tonic::transport::Channel;
 
 // Inspired from https://github.com/hyperium/tonic/discussions/924#discussioncomment-9854088
@@ -22,7 +25,7 @@ fn append_test_auth_header<T>(request: &mut tonic::Request<T>, token: &str) {
         .insert(AUTHORIZATION_HEADER_KEY, auth_value.parse().unwrap());
 }
 
-async fn start_test_server() -> Result<SocketAddr, Box<dyn std::error::Error>> {
+async fn start_test_server() -> Result<(SocketAddr, TempDir), Box<dyn std::error::Error>> {
     // using a temporary directory for db datapath
     let temp_dir = tempdir().unwrap();
 
@@ -31,6 +34,7 @@ async fn start_test_server() -> Result<SocketAddr, Box<dyn std::error::Error>> {
         index_type: IndexType::Flat,
         data_path: temp_dir.path().to_path_buf(),
         dimension: 3,
+        similarity: Similarity::Cosine,
     };
 
     let vector_db_api = api::init_api(db_config)?;
@@ -50,7 +54,7 @@ async fn start_test_server() -> Result<SocketAddr, Box<dyn std::error::Error>> {
         .inspect_err(|err| panic!("Could not start test server : {:?}", err));
     });
 
-    Ok(listener_addr)
+    Ok((listener_addr, temp_dir))
 }
 
 async fn create_test_client(
@@ -65,7 +69,7 @@ async fn create_test_client(
 
 #[tokio::test]
 async fn test_grpc_server_start() {
-    let server_addr = start_test_server().await.unwrap();
+    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
     let mut client = create_test_client(server_addr).await.unwrap();
 
     // insert a test vector
@@ -85,7 +89,7 @@ async fn test_grpc_server_start() {
 
 #[tokio::test]
 async fn test_insert_vector_rpc() {
-    let server_addr = start_test_server().await.unwrap();
+    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
     let mut client = create_test_client(server_addr).await.unwrap();
 
     // insert a test vector
@@ -95,7 +99,10 @@ async fn test_insert_vector_rpc() {
         vector: Some(DenseVector {
             values: test_vec.clone(),
         }),
-        payload: Some(Payload::default()),
+        payload: Some(Payload {
+            content_type: ContentType::Text as i32,
+            content: "test".to_string(),
+        }),
     });
     append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
 
@@ -116,6 +123,11 @@ async fn test_insert_vector_rpc() {
     let point = resp.unwrap().into_inner();
     assert_eq!(point.vector.unwrap().values, test_vec);
 
+    // payload assertions
+    let payload = point.payload.unwrap();
+    assert_eq!(payload.content_type, ContentType::Text as i32);
+    assert_eq!(payload.content, "test");
+
     // insert a new vector with mismatched dimensions
     let mut request = tonic::Request::new(InsertVectorRequest {
         vector: Some(DenseVector {
@@ -133,7 +145,7 @@ async fn test_insert_vector_rpc() {
 
 #[tokio::test]
 async fn test_delete_vector_rpc() {
-    let server_addr = start_test_server().await.unwrap();
+    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
     let mut client = create_test_client(server_addr).await.unwrap();
 
     // insert a test vector
@@ -175,7 +187,7 @@ async fn test_delete_vector_rpc() {
 
 #[tokio::test]
 async fn test_search_vector_rpc() {
-    let server_addr = start_test_server().await.unwrap();
+    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
     let mut client = create_test_client(server_addr).await.unwrap();
 
     // insert a test vector
@@ -221,7 +233,7 @@ async fn test_search_vector_rpc() {
 
 #[tokio::test]
 async fn test_unauthorized_rpc() {
-    let server_addr = start_test_server().await.unwrap();
+    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
     let mut client = create_test_client(server_addr).await.unwrap();
 
     // insert a test vector

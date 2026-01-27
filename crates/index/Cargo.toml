@@ -8,4 +8,5 @@ license.workspace = true
 
 [dependencies]
 defs.workspace = true
+rand.workspace = true
 uuid.workspace = true

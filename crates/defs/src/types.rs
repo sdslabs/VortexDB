@@ -9,6 +9,8 @@ pub type Element = f32;
 // pub type ElementHalf = f16; - Unstable https://github.com/rust-lang/rust/issues/116909
 pub type ElementByte = u8;
 
+pub type Dimension = usize;
+
 // Dense Vector and Vector are considered same
 // Sparse vector implementation not supported yet. Refer lib/sparse/src/common/sparse_vector.rs
 pub type DenseVector = Vec<Element>;
@@ -43,7 +45,7 @@ pub struct IndexedVector {
     pub vector: DenseVector,
 }
 
-#[derive(Deserialize, Copy, Clone)]
+#[derive(Debug, Deserialize, Copy, Clone)]
 pub enum Similarity {
     Euclidean,
     Manhattan,

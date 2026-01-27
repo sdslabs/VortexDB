@@ -5,7 +5,6 @@ use crate::interceptors;
 use crate::service::vectordb::{ContentType, Uuid};
 use crate::utils::log_rpc;
 use crate::{constants::SIMILARITY_PROTOBUFF_MAP, utils::ServerEndpoint};
-use defs::Payload;
 use tonic::{Request, Response, Status, service::InterceptorLayer, transport::Server};
 use tracing::{Level, event};
 use uuid::Uuid as UuidCrate;
@@ -57,7 +56,7 @@ impl VectorDb for VectorDBService {
 
         let point_id = self.vector_db.insert(
             dense_vector.unwrap().values,
-            Payload {
+            defs::Payload {
                 content_type: payload_type,
                 content: payload_content,
             },
@@ -87,6 +86,14 @@ impl VectorDb for VectorDBService {
         // return error if not found
         let point = point_opt.ok_or(Status::not_found(format!("point not found: {}", point_id)))?;
 
+        let payload = point.payload.map(|p| vectordb::Payload {
+            content_type: match p.content_type {
+                defs::ContentType::Text => ContentType::Text as i32,
+                defs::ContentType::Image => ContentType::Image as i32,
+            },
+            content: p.content,
+        });
+
         Ok(Response::new(Point {
             id: Some(PointId {
                 id: Some(Uuid {
@@ -96,7 +103,7 @@ impl VectorDb for VectorDBService {
             vector: Some(DenseVector {
                 values: point.vector.unwrap_or_default(),
             }),
-            payload: None,
+            payload,
         }))
     }
 

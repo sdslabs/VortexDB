@@ -12,8 +12,8 @@ use tokio::net::TcpListener;
 use tracing::info;
 
 use handler::{
-    delete_point_handler, get_point_handler, health_handler, insert_point_handler, root_handler,
-    search_points_handler,
+    batch_insert_handler, batch_search_handler, delete_point_handler, get_point_handler,
+    health_handler, insert_point_handler, root_handler, search_points_handler,
 };
 
 #[derive(Clone)]
@@ -33,6 +33,8 @@ pub fn create_router(db: Arc<VectorDb>) -> Router {
             get(get_point_handler).delete(delete_point_handler),
         )
         .route("/points/search", post(search_points_handler))
+        .route("/points/batch", post(batch_insert_handler))
+        .route("/points/search/batch", post(batch_search_handler))
         .with_state(app_state)
 }
 

@@ -1,15 +1,18 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::error::GrpcError;
 use crate::interceptors;
 use crate::service::vectordb::{ContentType, Uuid};
 use crate::utils::log_rpc;
 use crate::{constants::SIMILARITY_PROTOBUFF_MAP, utils::ServerEndpoint};
+use defs::SearchQueryInput;
 use tonic::{Request, Response, Status, service::InterceptorLayer, transport::Server};
 use tracing::{Level, event};
 use uuid::Uuid as UuidCrate;
 use vectordb::{
-    DenseVector, InsertVectorRequest, Point, PointId, SearchRequest, SearchResponse,
+    DenseVector, InsertVectorRequest, InsertVectorsBatchRequest, InsertVectorsBatchResponse, Point,
+    PointId, SearchPointsBatchRequest, SearchPointsBatchResponse, SearchRequest, SearchResponse,
     vector_db_server::{VectorDb, VectorDbServer},
 };
 
@@ -129,7 +132,11 @@ impl VectorDb for VectorDBService {
 
         let result_point_ids = self
             .vector_db
-            .search(query_vect.values, *similarity, limit as usize)
+            .search(SearchQueryInput {
+                vector: query_vect.values,
+                similarity: *similarity,
+                limit: limit as usize,
+            })
             .map_err(|e| Status::from(crate::error::GrpcError::from(e)))?;
 
         // create a mapped vector of PointIds
@@ -166,8 +173,82 @@ impl VectorDb for VectorDBService {
             Err(e) => Err(Status::from(crate::error::GrpcError::from(e))),
         }
     }
-}
 
+    async fn insert_vectors_batch(
+        &self,
+        request: tonic::Request<InsertVectorsBatchRequest>,
+    ) -> Result<tonic::Response<InsertVectorsBatchResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let mut ids = Vec::with_capacity(req.vectors.len());
+
+        for vec in req.vectors {
+            let payload = vec.payload.map(|p| defs::Payload {
+                content_type: match ContentType::try_from(p.content_type)
+                    .unwrap_or(ContentType::Text)
+                {
+                    ContentType::Text => defs::ContentType::Text,
+                    ContentType::Image => defs::ContentType::Image,
+                },
+                content: p.content,
+            });
+
+            let id = self
+                .vector_db
+                .insert(
+                    vec.vector.unwrap_or_default().values,
+                    payload.unwrap_or_default(),
+                )
+                .map_err(|e| tonic::Status::internal(e.to_string()))?;
+
+            ids.push(PointId {
+                id: Some(Uuid {
+                    value: id.to_string(),
+                }),
+            });
+        }
+
+        Ok(tonic::Response::new(InsertVectorsBatchResponse { ids }))
+    }
+
+    async fn search_points_batch(
+        &self,
+        request: tonic::Request<SearchPointsBatchRequest>,
+    ) -> Result<tonic::Response<SearchPointsBatchResponse>, tonic::Status> {
+        let req = request.into_inner();
+        let mut results = Vec::with_capacity(req.queries.len());
+
+        for query in req.queries {
+            let similarity = SIMILARITY_PROTOBUFF_MAP
+                .get(query.similarity as usize)
+                .ok_or(tonic::Status::invalid_argument("Invalid similarity"))?;
+
+            let ids = self
+                .vector_db
+                .search(SearchQueryInput {
+                    vector: query
+                        .query_vector
+                        .ok_or(tonic::Status::invalid_argument("missing query_vector"))?
+                        .values,
+                    similarity: *similarity,
+                    limit: query.limit as usize,
+                })
+                .map_err(|e| tonic::Status::from(GrpcError::from(e)))?;
+
+            results.push(SearchResponse {
+                result_point_ids: ids
+                    .into_iter()
+                    .map(|id| PointId {
+                        id: Some(Uuid {
+                            value: id.to_string(),
+                        }),
+                    })
+                    .collect(),
+            });
+        }
+
+        Ok(tonic::Response::new(SearchPointsBatchResponse { results }))
+    }
+}
 pub async fn run_server(
     vector_db_service: VectorDBService,
     endpoint: ServerEndpoint,

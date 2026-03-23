@@ -20,6 +20,9 @@ service VectorDB {
 
   //Search for the k nearest vectors to a target vector given a distance function
   rpc SearchPoints(SearchRequest) returns (SearchResponse) {}
+
+  rpc InsertVectorsBatch(InsertVectorsBatchRequest) returns (InsertVectorsBatchResponse) {}
+rpc SearchPointsBatch(SearchPointsBatchRequest) returns (SearchPointsBatchResponse) {}
 }
 
 
@@ -71,3 +74,18 @@ message Payload {
   string content = 2;
 }
 
+message InsertVectorsBatchRequest {
+  repeated InsertVectorRequest vectors = 1;
+}
+
+message InsertVectorsBatchResponse {
+  repeated PointID ids = 1;
+}
+
+message SearchPointsBatchRequest {
+  repeated SearchRequest queries = 1;
+}
+
+message SearchPointsBatchResponse {
+  repeated SearchResponse results = 1;
+}

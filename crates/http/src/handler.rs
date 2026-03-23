@@ -4,7 +4,10 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
-use defs::{DenseVector, Payload, Point, PointId, Similarity};
+use defs::{
+    AppError, BatchInsertRequest, BatchInsertResponse, BatchSearchRequest, BatchSearchResponse,
+    DenseVector, Payload, Point, PointId, SearchQueryInput, SearchResponse,
+};
 use index::error::IndexError;
 use serde::{Deserialize, Serialize};
 use storage::error::StorageError;
@@ -47,6 +50,21 @@ pub async fn insert_point_handler(
     }
 }
 
+pub async fn batch_insert_handler(
+    State(state): State<AppState>,
+    Json(request): Json<BatchInsertRequest>,
+) -> Result<Json<BatchInsertResponse>, AppError> {
+    let ids = state
+        .db
+        .insert_batch(request.points)
+        .map_err(|e| AppError::Api(e.to_string()))?;
+
+    Ok(Json(BatchInsertResponse {
+        inserted: ids.len(),
+        ids,
+    }))
+}
+
 pub async fn get_point_handler(
     Path(point_id): Path<PointId>,
     State(app_state): State<AppState>,
@@ -74,26 +92,11 @@ pub async fn delete_point_handler(
     }
 }
 
-#[derive(Deserialize)]
-pub struct SearchRequest {
-    pub vector: DenseVector,
-    pub similarity: Similarity,
-    pub limit: usize,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SearchResponse {
-    pub results: Vec<PointId>,
-}
-
 pub async fn search_points_handler(
     State(app_state): State<AppState>,
-    Json(request): Json<SearchRequest>,
+    Json(request): Json<SearchQueryInput>,
 ) -> Result<Json<SearchResponse>, (StatusCode, String)> {
-    match app_state
-        .db
-        .search(request.vector, request.similarity, request.limit)
-    {
+    match app_state.db.search(request) {
         Ok(results) => {
             let response = SearchResponse { results };
             Ok(Json(response))
@@ -103,6 +106,21 @@ pub async fn search_points_handler(
             Err(api_error_to_response(&e))
         }
     }
+}
+
+pub async fn batch_search_handler(
+    State(state): State<AppState>,
+    Json(request): Json<BatchSearchRequest>,
+) -> Result<Json<BatchSearchResponse>, AppError> {
+    let results = state
+        .db
+        .search_batch(request.queries)
+        .map_err(|e| AppError::Api(e.to_string()))?
+        .into_iter()
+        .map(|ids| SearchResponse { results: ids })
+        .collect();
+
+    Ok(Json(BatchSearchResponse { results }))
 }
 
 /// Map `ApiError` into an HTTP `(StatusCode, String)` response.

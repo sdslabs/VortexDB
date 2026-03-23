@@ -1,5 +1,5 @@
-use defs::{DbError, Dimension, IndexedVector, Similarity, SnapshottableDb};
-use defs::{DenseVector, Payload, Point, PointId};
+use defs::{DbError, Dimension, IndexedVector, SearchQueryInput, Similarity, SnapshottableDb};
+use defs::{DenseVector, Payload, Point, PointId, PointInput};
 use index::hnsw::HnswIndex;
 use index::kd_tree::index::KDTree;
 use std::path::{Path, PathBuf};
@@ -70,6 +70,37 @@ impl VectorDb {
         Ok(point_id)
     }
 
+    pub fn insert_batch(&self, points: Vec<PointInput>) -> Result<Vec<PointId>> {
+        let mut ids = Vec::with_capacity(points.len());
+
+        for point in points {
+            let id = point.id.unwrap_or_else(Uuid::new_v4);
+            let vector = point.vector;
+            let payload = point.payload;
+
+            if let Some(ref v) = vector
+                && v.len() != self.dimension
+            {
+                return Err(ApiError::DimensionMismatch {
+                    expected: self.dimension,
+                    got: v.len(),
+                });
+            }
+
+            self.storage.insert_point(id, vector.clone(), payload)?;
+
+            if let Some(v) = vector {
+                let indexed = IndexedVector { id, vector: v };
+                let mut index = self.index.write().map_err(|_| ApiError::LockError)?;
+                index.insert(indexed)?;
+            }
+
+            ids.push(id);
+        }
+
+        Ok(ids)
+    }
+
     //TODO: Make this an atomic operation
     pub fn delete(&self, id: PointId) -> Result<bool> {
         // Remove from storage
@@ -95,22 +126,17 @@ impl VectorDb {
         }
     }
 
-    pub fn search(
-        &self,
-        query: DenseVector,
-        similarity: Similarity,
-        limit: usize,
-    ) -> Result<Vec<PointId>> {
+    pub fn search(&self, query: SearchQueryInput) -> Result<Vec<PointId>> {
         // Validate search limit
-        if limit == 0 {
-            return Err(ApiError::InvalidSearchLimit { limit });
+        if query.limit == 0 {
+            return Err(ApiError::InvalidSearchLimit { limit: query.limit });
         }
 
         // Validate query dimension
-        if query.len() != self.dimension {
+        if query.vector.len() != self.dimension {
             return Err(ApiError::DimensionMismatch {
                 expected: self.dimension,
-                got: query.len(),
+                got: query.vector.len(),
             });
         }
 
@@ -118,9 +144,21 @@ impl VectorDb {
         let index = self.index.read().map_err(|_| ApiError::LockError)?;
 
         //TODO: Add feat of returning similarity scores in the search
-        let vectors = index.search(query, similarity, limit)?;
+        let vectors = index.search(query.vector, query.similarity, query.limit)?;
 
         Ok(vectors)
+    }
+
+    pub fn search_batch(&self, queries: Vec<SearchQueryInput>) -> Result<Vec<Vec<PointId>>> {
+        let mut results = Vec::with_capacity(queries.len());
+        let index = self.index.read().unwrap();
+
+        for query in queries {
+            let found = index.search(query.vector, query.similarity, query.limit)?;
+            results.push(found);
+        }
+
+        Ok(results)
     }
 
     pub fn list(&self, offset: PointId, limit: usize) -> Result<Option<VectorPage>> {
@@ -359,7 +397,13 @@ mod tests {
 
         // Search for the closest vector to [1.0, 0.1, 0.1]
         let query = vec![1.0, 0.1, 0.1];
-        let results = db.search(query, Similarity::Cosine, 1).unwrap();
+        let results = db
+            .search(SearchQueryInput {
+                vector: query,
+                similarity: Similarity::Cosine,
+                limit: 1,
+            })
+            .unwrap();
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], ids[0]); // The first vector should be closest
@@ -387,7 +431,13 @@ mod tests {
 
         // Search with limit 3
         let query = vec![0.0, 0.0, 0.0];
-        let results = db.search(query, Similarity::Euclidean, 3).unwrap();
+        let results = db
+            .search(SearchQueryInput {
+                vector: query,
+                similarity: Similarity::Euclidean,
+                limit: 3,
+            })
+            .unwrap();
 
         assert_eq!(results.len(), 3);
     }
@@ -397,7 +447,11 @@ mod tests {
         let (db, _temp_dir) = create_test_db();
 
         let query = vec![1.0, 2.0, 3.0];
-        let result = db.search(query, Similarity::Cosine, 0);
+        let result = db.search(SearchQueryInput {
+            vector: query,
+            similarity: Similarity::Cosine,
+            limit: 0,
+        });
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -416,7 +470,13 @@ mod tests {
         assert!(db.get(Uuid::new_v4()).unwrap().is_none());
 
         let query = vec![1.0, 2.0, 3.0];
-        let results = db.search(query, Similarity::Cosine, 10).unwrap();
+        let results = db
+            .search(SearchQueryInput {
+                vector: query,
+                similarity: Similarity::Cosine,
+                limit: 10,
+            })
+            .unwrap();
         assert_eq!(results.len(), 0);
     }
 

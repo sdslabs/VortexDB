@@ -23,7 +23,7 @@ impl HnswIndex {
         let mut current = ep;
         loop {
             let cur_vec = self.get_vec(current)?;
-            let mut best_score = distance(&query.to_vec(), cur_vec, self.similarity);
+            let mut best_score = distance(query, cur_vec, self.similarity);
             let mut best_id = current;
 
             let empty: &[PointId] = &[];
@@ -46,7 +46,7 @@ impl HnswIndex {
                     continue;
                 }
                 let n_vec = self.get_vec(n)?;
-                let score = distance(&query.to_vec(), n_vec, self.similarity);
+                let score = distance(query, n_vec, self.similarity);
                 if score < best_score {
                     best_score = score;
                     best_id = n;
@@ -91,7 +91,7 @@ impl HnswIndex {
                 .unwrap_or(ep),
         };
 
-        let ep_score = distance(&query.to_vec(), self.get_vec(seed)?, self.similarity);
+        let ep_score = distance(query, self.get_vec(seed)?, self.similarity);
         candidates.push((Reverse(OrdF32::new(ep_score)), seed));
         w_heap.push((OrdF32::new(ep_score), seed));
         visited.insert(seed);
@@ -125,7 +125,7 @@ impl HnswIndex {
                 }
 
                 visited.insert(n);
-                let score = distance(&query.to_vec(), self.get_vec(n)?, self.similarity);
+                let score = distance(query, self.get_vec(n)?, self.similarity);
                 let score = OrdF32::new(score);
                 candidates.push((Reverse(score), n));
                 if w_heap.len() < ef_construction {

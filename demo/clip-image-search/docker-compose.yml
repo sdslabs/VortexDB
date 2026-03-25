@@ -1,0 +1,74 @@
+services:
+  clip-vectorizer:
+    build:
+      context: ./clip-vectorizer
+      dockerfile: Dockerfile
+    ports:
+      - "5000:8080"
+    restart: unless-stopped
+
+  vortexdb:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    ports:
+      - "8081:3000"
+      - "50051:50051"
+    environment:
+      - RUST_LOG=info
+      - HTTP_PORT=3000
+      - GRPC_PORT=50051
+      - STORAGE_TYPE=inmemory
+      - INDEX_TYPE=hnsw
+      - GRPC_ROOT_PASSWORD=demo_password_123
+      - DIMENSION=512
+    volumes:
+      - vortexdb-data:/data
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: demo/clip-image-search/backend/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - CLIP_VECTORIZER_URL=http://clip-vectorizer:8080
+      - VORTEXDB_GRPC_URL=vortexdb:50051
+      - VORTEXDB_API_KEY=demo_password_123
+      - IMAGES_DIR=/app/images
+    volumes:
+      - ./backend/images:/app/images
+    depends_on:
+      - clip-vectorizer
+      - vortexdb
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  setup:
+    build:
+      context: ./setup
+      dockerfile: Dockerfile
+    environment:
+      - CLIP_VECTORIZER_URL=http://clip-vectorizer:8080
+      - VORTEXDB_URL=http://vortexdb:3000
+      - IMAGES_DIR=/app/images
+      - IMAGE_COUNT=100
+    volumes:
+      - ./backend/images:/app/images
+    depends_on:
+      - clip-vectorizer
+      - vortexdb
+    restart: "no"
+
+volumes:
+  vortexdb-data:

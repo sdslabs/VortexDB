@@ -8,6 +8,7 @@ members = [
     "crates/http",
     "crates/tui",
     "crates/grpc",
+    "crates/benchmark",
 ]
 
 [workspace.package]
@@ -20,6 +21,7 @@ axum = "0.8"
 axum-test = "18.1.0"
 bincode = "1.3.3"
 chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5.54", features = ["derive"] }
 color-eyre = "0.6.5"
 crossterm = "0.27"
 dotenv = "0.15.0"
@@ -53,3 +55,4 @@ index = { path = "crates/index" }
 server = { path = "crates/server" }
 storage = { path = "crates/storage" }
 tui = { path = "crates/tui" }
+#benchmark = { path = "crates/benchmark"}

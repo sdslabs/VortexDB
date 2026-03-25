@@ -6,6 +6,7 @@
 /data/
 .TODO
 /databases
+/crates/benchmark/Datasets
 .env
 __pycache__/
 build/

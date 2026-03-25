@@ -1,3 +1,4 @@
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use uuid::Uuid;
@@ -45,7 +46,7 @@ pub struct IndexedVector {
     pub vector: DenseVector,
 }
 
-#[derive(Debug, Deserialize, Copy, Clone)]
+#[derive(Debug, Deserialize, Copy, Clone, ValueEnum)]
 pub enum Similarity {
     Euclidean,
     Manhattan,

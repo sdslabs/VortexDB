@@ -17,7 +17,7 @@ impl PageTitle {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("Vector DB")
+                    .title("VortexDB")
                     .title_alignment(Alignment::Center)
                     .border_style(Style::default().fg(self.color)),
             )

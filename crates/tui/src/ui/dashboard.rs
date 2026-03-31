@@ -21,74 +21,37 @@ pub fn render_dashboard(f: &mut Frame, app: &App) {
         Line::from(""),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "██╗   ██╗███████╗ ██████╗████████╗ ██████╗ ██████╗ ",
+            "██╗   ██╗ ██████╗ ██████╗ ████████╗███████╗██╗  ██╗██████╗ ██████╗ ",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![Span::styled(
-            "██║   ██║██╔════╝██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗",
+            "██║   ██║██╔═══██╗██╔══██╗╚══██╔══╝██╔════╝╚██╗██╔╝██╔══██╗██╔══██╗",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![Span::styled(
-            "██║   ██║█████╗  ██║        ██║   ██║   ██║██████╔╝",
+            "██║   ██║██║   ██║██████╔╝   ██║   █████╗   ╚███╔╝ ██║  ██║██████╔╝",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![Span::styled(
-            "╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║   ██║██╔══██╗",
+            "╚██╗ ██╔╝██║   ██║██╔══██╗   ██║   ██╔══╝   ██╔██╗ ██║  ██║██╔══██╗",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![Span::styled(
-            " ╚████╔╝ ███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║",
+            " ╚████╔╝ ╚██████╔╝██║  ██║   ██║   ███████╗██╔╝ ██╗██████╔╝██████╔╝",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(ratatui::style::Modifier::BOLD),
         )]),
         Line::from(vec![Span::styled(
-            "  ╚═══╝  ╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        )]),
-        Line::from(""),
-        Line::from(vec![Span::styled(
-            "██████╗ ██████╗ ",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        )]),
-        Line::from(vec![Span::styled(
-            "██╔══██╗██╔══██╗",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        )]),
-        Line::from(vec![Span::styled(
-            "██║  ██║██████╔╝",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        )]),
-        Line::from(vec![Span::styled(
-            "██║  ██║██╔══██╗",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        )]),
-        Line::from(vec![Span::styled(
-            "██████╔╝██████╔╝",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        )]),
-        Line::from(vec![Span::styled(
-            "╚═════╝ ╚═════╝ ",
+            "  ╚═══╝   ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═════╝ ╚═════╝ ",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(ratatui::style::Modifier::BOLD),

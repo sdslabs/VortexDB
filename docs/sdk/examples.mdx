@@ -1,0 +1,602 @@
+---
+title: "SDK Examples"
+description: "Working code examples for the VortexDB Python SDK"
+---
+
+# SDK Examples
+
+Ready-to-run code examples demonstrating VortexDB Python SDK usage.
+
+## Basic Usage
+
+The simplest example showing all core operations:
+
+```python
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+def main():
+    # Initialize client
+    db = VortexDB(
+        grpc_url="localhost:50051",
+        api_key="my-secret-password",
+    )
+
+    # Insert a vector
+    point_id = db.insert(
+        vector=DenseVector([0.1, 0.2, 0.3]),
+        payload=Payload.text("hello world"),
+    )
+    print(f"Inserted point: {point_id}")
+
+    # Get the point
+    point = db.get(point_id=point_id)
+    print("Fetched point:", point.pretty())
+
+    # Search for similar vectors
+    results = db.search(
+        vector=DenseVector([0.1, 0.2, 0.3]),
+        similarity=Similarity.COSINE,
+        limit=3,
+    )
+    print("Search results:", results)
+
+    # Delete the point
+    db.delete(point_id=point_id)
+    print("Point deleted")
+
+    # Close connection
+    db.close()
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## Context Manager Usage
+
+Using the context manager for automatic resource cleanup:
+
+```python
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+def main():
+    # Connection is automatically closed when exiting the 'with' block
+    with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
+        # Insert some vectors
+        ids = []
+        for i in range(5):
+            pid = db.insert(
+                vector=DenseVector([i * 0.1, i * 0.2, i * 0.3]),
+                payload=Payload.text(f"Document {i}"),
+            )
+            ids.append(pid)
+            print(f"Inserted document {i}: {pid}")
+
+        # Search
+        results = db.search(
+            vector=DenseVector([0.2, 0.4, 0.6]),
+            similarity=Similarity.COSINE,
+            limit=3,
+        )
+
+        print("\nSearch results:")
+        for pid in results:
+            point = db.get(point_id=pid)
+            print(f"  - {point.payload.content}")
+
+    # Connection automatically closed here
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## Semantic Search with Embeddings
+
+Using sentence-transformers to build a semantic search system:
+
+```python
+"""
+Semantic search example using sentence-transformers.
+
+Requirements:
+    pip install sentence-transformers vortexdb
+
+Make sure VortexDB is running with DIMENSION=384
+"""
+
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from sentence_transformers import SentenceTransformer
+
+# Initialize embedding model (384 dimensions)
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Sample documents
+documents = [
+    "The quick brown fox jumps over the lazy dog",
+    "Machine learning is a subset of artificial intelligence",
+    "Python is a popular programming language for data science",
+    "VortexDB is a vector database built in Rust",
+    "Docker containers package applications with their dependencies",
+    "Neural networks are inspired by biological brain structures",
+    "REST APIs use HTTP methods for communication",
+    "PostgreSQL is a powerful relational database",
+]
+
+def embed(text: str) -> DenseVector:
+    """Convert text to vector embedding."""
+    embedding = model.encode(text).tolist()
+    return DenseVector(embedding)
+
+def main():
+    with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
+        # Index all documents
+        print("Indexing documents...")
+        point_ids = []
+        for doc in documents:
+            pid = db.insert(
+                vector=embed(doc),
+                payload=Payload.text(doc),
+            )
+            point_ids.append(pid)
+            print(f"  ✓ {doc[:50]}...")
+
+        # Interactive search
+        print("\n" + "=" * 50)
+        print("Semantic Search Demo")
+        print("=" * 50)
+
+        queries = [
+            "How do databases work?",
+            "Tell me about AI and machine learning",
+            "What programming languages are good for ML?",
+        ]
+
+        for query in queries:
+            print(f"\nQuery: '{query}'")
+            print("-" * 40)
+
+            results = db.search(
+                vector=embed(query),
+                similarity=Similarity.COSINE,
+                limit=3,
+            )
+
+            for i, pid in enumerate(results, 1):
+                point = db.get(point_id=pid)
+                print(f"  {i}. {point.payload.content}")
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## Error Handling
+
+Comprehensive error handling example:
+
+```python
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb.exceptions import (
+    VortexDBError,
+    AuthenticationError,
+    NotFoundError,
+    InvalidArgumentError,
+    TimeoutError,
+    ServiceUnavailableError,
+)
+
+def safe_insert(db: VortexDB, vector: list, content: str) -> str | None:
+    """Insert a vector with error handling."""
+    try:
+        point_id = db.insert(
+            vector=DenseVector(vector),
+            payload=Payload.text(content),
+        )
+        return point_id
+    except InvalidArgumentError as e:
+        print(f"Invalid input: {e}")
+        return None
+    except VortexDBError as e:
+        print(f"Database error: {e}")
+        return None
+
+def safe_get(db: VortexDB, point_id: str):
+    """Get a point with error handling."""
+    try:
+        point = db.get(point_id=point_id)
+        if point:
+            return point
+        else:
+            print(f"Point {point_id} not found")
+            return None
+    except NotFoundError:
+        print(f"Point {point_id} does not exist")
+        return None
+    except VortexDBError as e:
+        print(f"Error fetching point: {e}")
+        return None
+
+def main():
+    try:
+        db = VortexDB(
+            grpc_url="localhost:50051",
+            api_key="secret",
+            timeout=10.0,
+        )
+    except ServiceUnavailableError:
+        print("Could not connect to VortexDB server")
+        return
+    except AuthenticationError:
+        print("Invalid API key")
+        return
+
+    try:
+        # Try various operations
+        pid = safe_insert(db, [0.1, 0.2, 0.3, 0.4], "Test document")
+        if pid:
+            print(f"Inserted: {pid}")
+            point = safe_get(db, pid)
+            if point:
+                print(f"Content: {point.payload.content}")
+
+        # Try to get a non-existent point
+        safe_get(db, "nonexistent-id-12345")
+
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## Batch Processing
+
+Efficiently process large datasets:
+
+```python
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from typing import List, Tuple
+import time
+
+def batch_insert(
+    db: VortexDB,
+    items: List[Tuple[List[float], str]],
+    batch_size: int = 100,
+) -> List[str]:
+    """Insert items in batches with progress reporting."""
+    point_ids = []
+    total = len(items)
+
+    for i in range(0, total, batch_size):
+        batch = items[i:i + batch_size]
+        batch_ids = []
+
+        for vector, content in batch:
+            pid = db.insert(
+                vector=DenseVector(vector),
+                payload=Payload.text(content),
+            )
+            batch_ids.append(pid)
+
+        point_ids.extend(batch_ids)
+
+        progress = min(i + batch_size, total)
+        print(f"Progress: {progress}/{total} ({100 * progress // total}%)")
+
+    return point_ids
+
+def main():
+    # Generate sample data
+    print("Generating sample data...")
+    items = [
+        ([i * 0.001 for _ in range(4)], f"Document {i}")
+        for i in range(1000)
+    ]
+
+    with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
+        print(f"\nInserting {len(items)} documents...")
+        start = time.time()
+
+        ids = batch_insert(db, items, batch_size=100)
+
+        elapsed = time.time() - start
+        print(f"\nInserted {len(ids)} documents in {elapsed:.2f}s")
+        print(f"Rate: {len(ids) / elapsed:.0f} inserts/second")
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## FastAPI Integration
+
+Build a REST API wrapper around VortexDB:
+
+```python
+"""
+FastAPI wrapper for VortexDB.
+
+Run with: uvicorn example:app --reload
+"""
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb.exceptions import NotFoundError, VortexDBError
+
+app = FastAPI(title="VortexDB API Wrapper")
+
+# Global client (initialized on startup)
+db: VortexDB = None
+
+class InsertRequest(BaseModel):
+    vector: List[float]
+    content: str
+
+class InsertResponse(BaseModel):
+    point_id: str
+
+class SearchRequest(BaseModel):
+    vector: List[float]
+    limit: int = 10
+    similarity: str = "cosine"
+
+class SearchResult(BaseModel):
+    point_id: str
+    content: str
+
+class SearchResponse(BaseModel):
+    results: List[SearchResult]
+
+@app.on_event("startup")
+async def startup():
+    global db
+    db = VortexDB(
+        grpc_url="localhost:50051",
+        api_key="secret",
+    )
+
+@app.on_event("shutdown")
+async def shutdown():
+    global db
+    if db:
+        db.close()
+
+@app.post("/insert", response_model=InsertResponse)
+async def insert_vector(request: InsertRequest):
+    try:
+        point_id = db.insert(
+            vector=DenseVector(request.vector),
+            payload=Payload.text(request.content),
+        )
+        return InsertResponse(point_id=point_id)
+    except VortexDBError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/points/{point_id}")
+async def get_point(point_id: str):
+    try:
+        point = db.get(point_id=point_id)
+        if not point:
+            raise HTTPException(status_code=404, detail="Point not found")
+        return {
+            "id": point.id,
+            "vector": point.vector.to_list(),
+            "content": point.payload.content,
+        }
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Point not found")
+
+@app.post("/search", response_model=SearchResponse)
+async def search_vectors(request: SearchRequest):
+    similarity_map = {
+        "cosine": Similarity.COSINE,
+        "euclidean": Similarity.EUCLIDEAN,
+        "manhattan": Similarity.MANHATTAN,
+        "hamming": Similarity.HAMMING,
+    }
+
+    sim = similarity_map.get(request.similarity.lower())
+    if not sim:
+        raise HTTPException(status_code=400, detail="Invalid similarity metric")
+
+    results = db.search(
+        vector=DenseVector(request.vector),
+        similarity=sim,
+        limit=request.limit,
+    )
+
+    search_results = []
+    for pid in results:
+        point = db.get(point_id=pid)
+        if point:
+            search_results.append(SearchResult(
+                point_id=pid,
+                content=point.payload.content,
+            ))
+
+    return SearchResponse(results=search_results)
+
+@app.delete("/points/{point_id}")
+async def delete_point(point_id: str):
+    db.delete(point_id=point_id)
+    return {"status": "deleted"}
+```
+
+---
+
+## Environment Configuration
+
+Using environment variables for configuration:
+
+```python
+"""
+Configuration example using environment variables.
+
+Set these before running:
+    export VORTEXDB_GRPC_URL=localhost:50051
+    export VORTEXDB_API_KEY=your-api-key
+    export VORTEXDB_TIMEOUT=30
+"""
+
+import os
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+def main():
+    # Method 1: Set env vars before import
+    os.environ.setdefault("VORTEXDB_GRPC_URL", "localhost:50051")
+    os.environ.setdefault("VORTEXDB_API_KEY", "secret")
+    os.environ.setdefault("VORTEXDB_TIMEOUT", "30")
+
+    # Client reads from environment
+    with VortexDB() as db:
+        pid = db.insert(
+            vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+            payload=Payload.text("Test document"),
+        )
+        print(f"Inserted: {pid}")
+
+    # Method 2: Override specific settings
+    with VortexDB(timeout=60.0) as db:  # Uses env for url/key, overrides timeout
+        results = db.search(
+            vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+            similarity=Similarity.COSINE,
+            limit=5,
+        )
+        print(f"Found {len(results)} results")
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## Testing Example
+
+Unit testing with a mock or real database:
+
+```python
+"""
+Testing example for VortexDB applications.
+
+Run with: pytest test_example.py -v
+"""
+
+import pytest
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+# Fixtures
+@pytest.fixture
+def db():
+    """Create a VortexDB connection for testing."""
+    client = VortexDB(
+        grpc_url="localhost:50051",
+        api_key="test-key",
+    )
+    yield client
+    client.close()
+
+@pytest.fixture
+def sample_vector():
+    """Create a sample vector."""
+    return DenseVector([0.1, 0.2, 0.3, 0.4])
+
+@pytest.fixture
+def sample_payload():
+    """Create a sample payload."""
+    return Payload.text("Test document")
+
+# Tests
+class TestVortexDB:
+    def test_insert_and_get(self, db, sample_vector, sample_payload):
+        """Test inserting and retrieving a point."""
+        # Insert
+        point_id = db.insert(
+            vector=sample_vector,
+            payload=sample_payload,
+        )
+        assert point_id is not None
+        assert len(point_id) > 0
+
+        # Get
+        point = db.get(point_id=point_id)
+        assert point is not None
+        assert point.id == point_id
+        assert point.payload.content == "Test document"
+
+        # Cleanup
+        db.delete(point_id=point_id)
+
+    def test_search(self, db, sample_vector, sample_payload):
+        """Test search functionality."""
+        # Insert test data
+        point_id = db.insert(
+            vector=sample_vector,
+            payload=sample_payload,
+        )
+
+        # Search
+        results = db.search(
+            vector=sample_vector,
+            similarity=Similarity.COSINE,
+            limit=10,
+        )
+
+        assert isinstance(results, list)
+        assert point_id in results
+
+        # Cleanup
+        db.delete(point_id=point_id)
+
+    def test_delete(self, db, sample_vector, sample_payload):
+        """Test delete functionality."""
+        # Insert
+        point_id = db.insert(
+            vector=sample_vector,
+            payload=sample_payload,
+        )
+
+        # Delete
+        db.delete(point_id=point_id)
+
+        # Verify deleted
+        point = db.get(point_id=point_id)
+        assert point is None
+
+    def test_dense_vector_validation(self):
+        """Test DenseVector validation."""
+        # Valid vectors
+        assert DenseVector([1.0, 2.0, 3.0])
+        assert DenseVector((1, 2, 3))  # Converted to floats
+
+        # Invalid vectors
+        with pytest.raises(TypeError):
+            DenseVector("not a list")
+
+        with pytest.raises(ValueError):
+            DenseVector([])  # Empty
+
+        with pytest.raises(TypeError):
+            DenseVector(["a", "b", "c"])  # Non-numeric
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDK Reference" icon="book" href="/sdk/reference">
+    Complete API documentation
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/overview">
+    gRPC and HTTP API docs
+  </Card>
+</CardGroup>

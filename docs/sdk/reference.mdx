@@ -1,0 +1,588 @@
+---
+title: "SDK Reference"
+description: "Complete Python SDK API documentation"
+---
+
+# Python SDK Reference
+
+Complete API documentation for the VortexDB Python client.
+
+## Installation
+
+```bash
+pip install vortexdb
+```
+
+---
+
+## VortexDB
+
+The main client class for interacting with VortexDB.
+
+```python
+from vortexdb import VortexDB
+```
+
+### Constructor
+
+```python
+VortexDB(
+    *,
+    grpc_url: str | None = None,
+    api_key: str | None = None,
+    timeout: float | None = None,
+)
+```
+
+<ParamField body="grpc_url" type="str" default="localhost:50051">
+  The gRPC server address. Can also be set via `VORTEXDB_GRPC_URL` environment variable.
+</ParamField>
+
+<ParamField body="api_key" type="str" default="None">
+  Authentication key for the gRPC API. Can also be set via `VORTEXDB_API_KEY` environment variable.
+</ParamField>
+
+<ParamField body="timeout" type="float" default="30.0">
+  Request timeout in seconds. Can also be set via `VORTEXDB_TIMEOUT` environment variable.
+</ParamField>
+
+**Example:**
+
+```python
+# Explicit configuration
+db = VortexDB(
+    grpc_url="localhost:50051",
+    api_key="secret",
+    timeout=60.0,
+)
+
+# Using environment variables
+import os
+os.environ["VORTEXDB_GRPC_URL"] = "localhost:50051"
+os.environ["VORTEXDB_API_KEY"] = "secret"
+db = VortexDB()
+```
+
+---
+
+### Methods
+
+#### insert
+
+Insert a vector with its payload into the database.
+
+```python
+def insert(
+    self,
+    *,
+    vector: DenseVector,
+    payload: Payload,
+) -> str
+```
+
+<ParamField body="vector" type="DenseVector" required>
+  The vector to insert. Must match the server's configured dimension.
+</ParamField>
+
+<ParamField body="payload" type="Payload" required>
+  Metadata to associate with the vector.
+</ParamField>
+
+<ResponseField name="return" type="str">
+  The UUID of the created point.
+</ResponseField>
+
+**Raises:**
+- `TypeError`: If vector is not a `DenseVector`
+- `InvalidArgumentError`: If vector dimensions don't match
+- `AuthenticationError`: If API key is invalid
+
+**Example:**
+
+```python
+point_id = db.insert(
+    vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+    payload=Payload.text("My document"),
+)
+print(f"Created point: {point_id}")
+```
+
+---
+
+#### get
+
+Retrieve a point by its ID.
+
+```python
+def get(
+    self,
+    *,
+    point_id: str,
+) -> Point | None
+```
+
+<ParamField body="point_id" type="str" required>
+  The UUID of the point to retrieve.
+</ParamField>
+
+<ResponseField name="return" type="Point | None">
+  The point if found, `None` otherwise.
+</ResponseField>
+
+**Raises:**
+- `AuthenticationError`: If API key is invalid
+- `InternalServerError`: On server error
+
+**Example:**
+
+```python
+point = db.get(point_id="550e8400-e29b-41d4-a716-446655440000")
+
+if point:
+    print(f"Vector: {point.vector.to_list()}")
+    print(f"Payload: {point.payload.content}")
+else:
+    print("Point not found")
+```
+
+---
+
+#### search
+
+Search for the k nearest neighbors to a query vector.
+
+```python
+def search(
+    self,
+    *,
+    vector: DenseVector,
+    similarity: Similarity,
+    limit: int,
+) -> List[str]
+```
+
+<ParamField body="vector" type="DenseVector" required>
+  The query vector. Must match the server's configured dimension.
+</ParamField>
+
+<ParamField body="similarity" type="Similarity" required>
+  The distance metric to use for comparison.
+</ParamField>
+
+<ParamField body="limit" type="int" required>
+  Maximum number of results to return.
+</ParamField>
+
+<ResponseField name="return" type="List[str]">
+  List of point IDs ordered by similarity (closest first).
+</ResponseField>
+
+**Raises:**
+- `TypeError`: If vector is not a `DenseVector`
+- `InvalidArgumentError`: If vector dimensions don't match
+- `AuthenticationError`: If API key is invalid
+
+**Example:**
+
+```python
+results = db.search(
+    vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+    similarity=Similarity.COSINE,
+    limit=10,
+)
+
+for point_id in results:
+    point = db.get(point_id=point_id)
+    print(f"  - {point.payload.content}")
+```
+
+---
+
+#### delete
+
+Delete a point by its ID.
+
+```python
+def delete(
+    self,
+    *,
+    point_id: str,
+) -> None
+```
+
+<ParamField body="point_id" type="str" required>
+  The UUID of the point to delete.
+</ParamField>
+
+**Raises:**
+- `AuthenticationError`: If API key is invalid
+- `InternalServerError`: On server error
+
+**Example:**
+
+```python
+db.delete(point_id="550e8400-e29b-41d4-a716-446655440000")
+```
+
+---
+
+#### close
+
+Close the gRPC connection.
+
+```python
+def close(self) -> None
+```
+
+**Example:**
+
+```python
+db = VortexDB(grpc_url="localhost:50051", api_key="secret")
+# ... use the client ...
+db.close()
+```
+
+---
+
+### Context Manager
+
+The client supports the context manager protocol for automatic cleanup:
+
+```python
+with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
+    point_id = db.insert(
+        vector=DenseVector([0.1, 0.2, 0.3]),
+        payload=Payload.text("Hello"),
+    )
+# Connection automatically closed
+```
+
+---
+
+## DenseVector
+
+An immutable dense vector of floating-point values.
+
+```python
+from vortexdb import DenseVector
+```
+
+### Constructor
+
+```python
+DenseVector(values: List[float] | Tuple[float, ...])
+```
+
+<ParamField body="values" type="List[float] | Tuple[float, ...]" required>
+  The vector components. Must be non-empty and contain numeric values.
+</ParamField>
+
+**Raises:**
+- `TypeError`: If values is not a list or tuple
+- `ValueError`: If values is empty
+- `TypeError`: If any value is not numeric
+
+**Example:**
+
+```python
+# From list
+vec = DenseVector([0.1, 0.2, 0.3, 0.4])
+
+# From tuple
+vec = DenseVector((0.1, 0.2, 0.3, 0.4))
+
+# Integers are converted to floats
+vec = DenseVector([1, 2, 3, 4])  # -> [1.0, 2.0, 3.0, 4.0]
+```
+
+### Methods
+
+#### to_list
+
+Convert the vector to a Python list.
+
+```python
+def to_list(self) -> list[float]
+```
+
+**Example:**
+
+```python
+vec = DenseVector([0.1, 0.2, 0.3])
+values = vec.to_list()  # [0.1, 0.2, 0.3]
+```
+
+### Properties
+
+#### values
+
+Access the vector values (read-only).
+
+```python
+vec = DenseVector([0.1, 0.2, 0.3])
+print(vec.values)  # (0.1, 0.2, 0.3)
+```
+
+---
+
+## Payload
+
+Metadata associated with a vector.
+
+```python
+from vortexdb import Payload
+```
+
+### Factory Methods
+
+#### text
+
+Create a text payload.
+
+```python
+@staticmethod
+def text(content: str) -> Payload
+```
+
+**Example:**
+
+```python
+payload = Payload.text("This is my document content")
+```
+
+#### image
+
+Create an image payload.
+
+```python
+@staticmethod
+def image(content: str) -> Payload
+```
+
+**Example:**
+
+```python
+payload = Payload.image("path/to/image.jpg")
+```
+
+### Constructor
+
+```python
+Payload(content_type: ContentType, content: str)
+```
+
+<ParamField body="content_type" type="ContentType" required>
+  The type of content (`ContentType.TEXT` or `ContentType.IMAGE`).
+</ParamField>
+
+<ParamField body="content" type="str" required>
+  The content string.
+</ParamField>
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `content_type` | `ContentType` | Type of payload |
+| `content` | `str` | Content string |
+
+---
+
+## Point
+
+A point returned from the database (vector + payload + ID).
+
+```python
+from vortexdb.models import Point
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `str` | Point UUID |
+| `vector` | `DenseVector` | The vector values |
+| `payload` | `Payload` | Associated metadata |
+
+### Methods
+
+#### pretty
+
+Return a formatted string representation.
+
+```python
+def pretty(self) -> str
+```
+
+**Example:**
+
+```python
+point = db.get(point_id="...")
+print(point.pretty())
+# Output:
+# Point ID: 550e8400-e29b-41d4-a716-446655440000
+# Vector: [0.1, 0.2, 0.3, 0.4]
+# Payload Type: Text
+# Payload Content: My document
+```
+
+---
+
+## Similarity
+
+Enum for distance/similarity metrics.
+
+```python
+from vortexdb import Similarity
+```
+
+### Values
+
+| Value | Description |
+|-------|-------------|
+| `Similarity.EUCLIDEAN` | L2 distance (straight line) |
+| `Similarity.MANHATTAN` | L1 distance (city block) |
+| `Similarity.HAMMING` | Count of differing elements |
+| `Similarity.COSINE` | Angular distance |
+
+**Example:**
+
+```python
+from vortexdb import Similarity
+
+# Use in search
+results = db.search(
+    vector=DenseVector([0.1, 0.2, 0.3]),
+    similarity=Similarity.COSINE,
+    limit=5,
+)
+```
+
+---
+
+## ContentType
+
+Enum for payload content types.
+
+```python
+from vortexdb.models import ContentType
+```
+
+### Values
+
+| Value | Description |
+|-------|-------------|
+| `ContentType.TEXT` | Text content |
+| `ContentType.IMAGE` | Image reference |
+
+---
+
+## Exceptions
+
+All exceptions inherit from `VortexDBError`.
+
+```python
+from vortexdb.exceptions import (
+    VortexDBError,
+    AuthenticationError,
+    NotFoundError,
+    InvalidArgumentError,
+    TimeoutError,
+    ServiceUnavailableError,
+    InternalServerError,
+    ConfigurationError,
+)
+```
+
+### Exception Hierarchy
+
+| Exception | Description |
+|-----------|-------------|
+| `VortexDBError` | Base exception for all errors |
+| `AuthenticationError` | Invalid or missing API key |
+| `NotFoundError` | Requested resource not found |
+| `InvalidArgumentError` | Invalid input parameters |
+| `TimeoutError` | Request timed out |
+| `ServiceUnavailableError` | Server is unavailable |
+| `InternalServerError` | Server-side error |
+| `ConfigurationError` | Invalid client configuration |
+
+**Example:**
+
+```python
+from vortexdb.exceptions import (
+    AuthenticationError,
+    NotFoundError,
+    VortexDBError,
+)
+
+try:
+    point = db.get(point_id="nonexistent")
+except NotFoundError:
+    print("Point does not exist")
+except AuthenticationError:
+    print("Check your API key")
+except VortexDBError as e:
+    print(f"Unexpected error: {e}")
+```
+
+---
+
+## Configuration
+
+### VortexDBConfig
+
+Internal configuration class (usually not used directly).
+
+```python
+from vortexdb.config import VortexDBConfig
+
+config = VortexDBConfig.from_env(
+    grpc_url="localhost:50051",
+    api_key="secret",
+    timeout=30.0,
+)
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VORTEXDB_GRPC_URL` | Server address | `localhost:50051` |
+| `VORTEXDB_API_KEY` | Authentication key | None |
+| `VORTEXDB_TIMEOUT` | Request timeout (seconds) | `30.0` |
+
+---
+
+## Type Hints
+
+The SDK is fully typed. Import types for type hints:
+
+```python
+from typing import List, Optional
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb.models import Point, ContentType
+
+def search_documents(
+    db: VortexDB,
+    query_vector: List[float],
+    limit: int = 10,
+) -> List[Optional[Point]]:
+    results = db.search(
+        vector=DenseVector(query_vector),
+        similarity=Similarity.COSINE,
+        limit=limit,
+    )
+    return [db.get(point_id=pid) for pid in results]
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDK Examples" icon="code" href="/sdk/examples">
+    Working code examples
+  </Card>
+  <Card title="Python SDK Guide" icon="python" href="/guides/python-sdk">
+    Build a semantic search app
+  </Card>
+</CardGroup>

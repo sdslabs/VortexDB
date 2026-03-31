@@ -1,0 +1,329 @@
+openapi: 3.0.3
+info:
+  title: VortexDB HTTP API
+  description: |
+    RESTful API for VortexDB - a high-performance vector database built in Rust.
+    
+    This API provides CRUD operations for vector points and similarity search.
+  version: 1.0.0
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  contact:
+    name: SDSLabs
+    url: https://github.com/sdslabs/VortexDB
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Server health endpoints
+  - name: Points
+    description: Vector point operations
+
+paths:
+  /:
+    get:
+      tags:
+        - Health
+      summary: Root endpoint
+      description: Verify the server is running
+      operationId: getRoot
+      responses:
+        '200':
+          description: Server is running
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Vector Database server is running!
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the server is healthy
+      operationId: getHealth
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+
+  /points:
+    post:
+      tags:
+        - Points
+      summary: Insert a point
+      description: Insert a new vector with its associated payload
+      operationId: insertPoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsertRequest'
+            example:
+              vector: [0.1, 0.2, 0.3, 0.4]
+              payload:
+                content_type: Text
+                content: Hello, VortexDB!
+      responses:
+        '201':
+          description: Point created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsertResponse'
+              example:
+                point_id: 550e8400-e29b-41d4-a716-446655440000
+        '400':
+          description: Invalid request
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Invalid vector dimensions
+        '500':
+          description: Server error
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Failed to insert point
+
+  /points/{point_id}:
+    get:
+      tags:
+        - Points
+      summary: Get a point
+      description: Retrieve a point by its ID
+      operationId: getPoint
+      parameters:
+        - name: point_id
+          in: path
+          required: true
+          description: UUID of the point
+          schema:
+            type: string
+            format: uuid
+            example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '200':
+          description: Point found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Point'
+              example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                vector: [0.1, 0.2, 0.3, 0.4]
+                payload:
+                  content_type: Text
+                  content: Hello, VortexDB!
+        '404':
+          description: Point not found
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Point not found
+        '500':
+          description: Server error
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Failed to get point
+
+    delete:
+      tags:
+        - Points
+      summary: Delete a point
+      description: Delete a point by its ID
+      operationId: deletePoint
+      parameters:
+        - name: point_id
+          in: path
+          required: true
+          description: UUID of the point
+          schema:
+            type: string
+            format: uuid
+            example: 550e8400-e29b-41d4-a716-446655440000
+      responses:
+        '204':
+          description: Point deleted successfully
+        '500':
+          description: Server error
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Failed to delete point
+
+  /points/search:
+    post:
+      tags:
+        - Points
+      summary: Search for similar vectors
+      description: Find the k nearest neighbors to a query vector
+      operationId: searchPoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            example:
+              vector: [0.1, 0.2, 0.3, 0.4]
+              similarity: Cosine
+              limit: 5
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+              example:
+                results:
+                  - 550e8400-e29b-41d4-a716-446655440000
+                  - 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+        '400':
+          description: Invalid request
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Invalid vector dimensions
+        '500':
+          description: Server error
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: Search failed
+
+components:
+  schemas:
+    DenseVector:
+      type: array
+      items:
+        type: number
+        format: float
+      description: Array of floating-point values representing the vector
+      example: [0.1, 0.2, 0.3, 0.4]
+
+    ContentType:
+      type: string
+      enum:
+        - Text
+        - Image
+      description: Type of payload content
+      example: Text
+
+    Payload:
+      type: object
+      required:
+        - content_type
+        - content
+      properties:
+        content_type:
+          $ref: '#/components/schemas/ContentType'
+        content:
+          type: string
+          description: Content string
+          example: Hello, VortexDB!
+
+    Similarity:
+      type: string
+      enum:
+        - Euclidean
+        - Manhattan
+        - Hamming
+        - Cosine
+      description: |
+        Distance/similarity metric:
+        - **Euclidean**: L2 distance (straight line)
+        - **Manhattan**: L1 distance (city block)
+        - **Hamming**: Count of differing elements
+        - **Cosine**: Angular distance (1 - cosine similarity)
+      example: Cosine
+
+    Point:
+      type: object
+      required:
+        - id
+        - vector
+        - payload
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the point
+          example: 550e8400-e29b-41d4-a716-446655440000
+        vector:
+          $ref: '#/components/schemas/DenseVector'
+        payload:
+          $ref: '#/components/schemas/Payload'
+
+    InsertRequest:
+      type: object
+      required:
+        - vector
+        - payload
+      properties:
+        vector:
+          $ref: '#/components/schemas/DenseVector'
+        payload:
+          $ref: '#/components/schemas/Payload'
+
+    InsertResponse:
+      type: object
+      required:
+        - point_id
+      properties:
+        point_id:
+          type: string
+          format: uuid
+          description: UUID of the created point
+          example: 550e8400-e29b-41d4-a716-446655440000
+
+    SearchRequest:
+      type: object
+      required:
+        - vector
+        - similarity
+        - limit
+      properties:
+        vector:
+          $ref: '#/components/schemas/DenseVector'
+        similarity:
+          $ref: '#/components/schemas/Similarity'
+        limit:
+          type: integer
+          minimum: 1
+          description: Maximum number of results to return
+          example: 5
+
+    SearchResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Array of point IDs ordered by similarity (closest first)
+          example:
+            - 550e8400-e29b-41d4-a716-446655440000
+            - 6ba7b810-9dad-11d1-80b4-00c04fd430c8

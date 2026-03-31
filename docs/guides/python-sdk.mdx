@@ -1,0 +1,424 @@
+---
+title: "Build with Python SDK"
+description: "Create a semantic search application using the VortexDB Python client"
+---
+
+# Build with the Python SDK
+
+This guide walks through building a semantic search application using VortexDB's Python SDK.
+
+## Installation
+
+```bash
+pip install vortexdb
+```
+
+Or install from source:
+
+```bash
+git clone https://github.com/sdslabs/VortexDB.git
+cd VortexDB/client/python
+pip install -e .
+```
+
+<Note>
+The Python SDK requires Python 3.9+ and uses gRPC for communication.
+</Note>
+
+## Quick Start
+
+```python
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+# Connect to VortexDB
+db = VortexDB(
+    grpc_url="localhost:50051",
+    api_key="your-api-key"
+)
+
+# Insert a vector
+point_id = db.insert(
+    vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+    payload=Payload.text("Hello, world!")
+)
+
+# Search for similar vectors
+results = db.search(
+    vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+    similarity=Similarity.COSINE,
+    limit=5
+)
+
+# Clean up
+db.close()
+```
+
+## Client Configuration
+
+### Connection Options
+
+```python
+db = VortexDB(
+    grpc_url="localhost:50051",  # VortexDB server address
+    api_key="your-api-key",      # Authentication key
+    timeout=30.0,                # Request timeout in seconds
+)
+```
+
+### Environment Variables
+
+The client can also be configured via environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `VORTEXDB_GRPC_URL` | Server address |
+| `VORTEXDB_API_KEY` | Authentication key |
+| `VORTEXDB_TIMEOUT` | Request timeout |
+
+```python
+import os
+os.environ["VORTEXDB_GRPC_URL"] = "localhost:50051"
+os.environ["VORTEXDB_API_KEY"] = "secret"
+
+# Client uses environment variables
+db = VortexDB()
+```
+
+### Priority Order
+
+Configuration is loaded in this order (later overrides earlier):
+1. Default values
+2. Environment variables
+3. Constructor arguments
+
+## Using Context Managers
+
+The recommended way to use the client is with a context manager:
+
+```python
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+# Connection is automatically closed when exiting the 'with' block
+with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
+    point_id = db.insert(
+        vector=DenseVector([0.1, 0.2, 0.3]),
+        payload=Payload.text("My document")
+    )
+    print(f"Inserted: {point_id}")
+# Connection closed automatically
+```
+
+## Core Operations
+
+### Insert Vectors
+
+```python
+from vortexdb import DenseVector, Payload
+
+# Insert a text document
+point_id = db.insert(
+    vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+    payload=Payload.text("This is my document content")
+)
+
+# Insert an image reference
+image_id = db.insert(
+    vector=DenseVector([0.5, 0.6, 0.7, 0.8]),
+    payload=Payload.image("path/to/image.jpg")
+)
+```
+
+### Retrieve Points
+
+```python
+# Get a point by ID
+point = db.get(point_id=point_id)
+
+if point:
+    print(f"ID: {point.id}")
+    print(f"Vector: {point.vector.to_list()}")
+    print(f"Content: {point.payload.content}")
+    print(f"Type: {point.payload.content_type}")
+    
+    # Pretty print
+    print(point.pretty())
+else:
+    print("Point not found")
+```
+
+### Search for Similar Vectors
+
+```python
+from vortexdb import Similarity
+
+# Search with different metrics
+results = db.search(
+    vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+    similarity=Similarity.COSINE,  # or EUCLIDEAN, MANHATTAN, HAMMING
+    limit=10
+)
+
+# Results are point IDs ordered by similarity
+for point_id in results:
+    point = db.get(point_id=point_id)
+    print(f"  {point.payload.content}")
+```
+
+### Delete Points
+
+```python
+# Delete by ID
+db.delete(point_id=point_id)
+```
+
+## Data Types
+
+### DenseVector
+
+```python
+from vortexdb import DenseVector
+
+# Create from list
+vec = DenseVector([0.1, 0.2, 0.3, 0.4])
+
+# Create from tuple
+vec = DenseVector((0.1, 0.2, 0.3, 0.4))
+
+# Access values
+values = vec.to_list()  # [0.1, 0.2, 0.3, 0.4]
+```
+
+<Warning>
+All vectors must have the same dimension as configured on the server (`DIMENSION` env var).
+</Warning>
+
+### Payload
+
+```python
+from vortexdb import Payload
+
+# Text payload
+text_payload = Payload.text("My document content")
+
+# Image payload
+image_payload = Payload.image("path/to/image.jpg")
+
+# Manual construction
+from vortexdb.models import ContentType
+payload = Payload(ContentType.TEXT, "Custom content")
+```
+
+### Similarity Metrics
+
+```python
+from vortexdb import Similarity
+
+# Available metrics
+Similarity.COSINE      # Best for normalized embeddings
+Similarity.EUCLIDEAN   # L2 distance
+Similarity.MANHATTAN   # L1 distance  
+Similarity.HAMMING     # For binary vectors
+```
+
+## Error Handling
+
+```python
+from vortexdb import VortexDB
+from vortexdb.exceptions import (
+    VortexDBError,
+    AuthenticationError,
+    NotFoundError,
+    InvalidArgumentError,
+    TimeoutError,
+    ServiceUnavailableError,
+    InternalServerError,
+)
+
+try:
+    db = VortexDB(grpc_url="localhost:50051", api_key="wrong-key")
+    point = db.get(point_id="some-id")
+except AuthenticationError:
+    print("Invalid API key")
+except NotFoundError:
+    print("Point not found")
+except TimeoutError:
+    print("Request timed out")
+except ServiceUnavailableError:
+    print("Server is unavailable")
+except VortexDBError as e:
+    print(f"VortexDB error: {e}")
+```
+
+## Building a Semantic Search App
+
+Here's a complete example that builds a semantic search application using sentence embeddings:
+
+```python
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+# You'll need an embedding model (e.g., sentence-transformers)
+# pip install sentence-transformers
+from sentence_transformers import SentenceTransformer
+
+# Initialize embedding model
+model = SentenceTransformer('all-MiniLM-L6-v2')  # 384 dimensions
+
+# Sample documents
+documents = [
+    "VortexDB is a vector database built in Rust",
+    "Machine learning models convert text to embeddings",
+    "Semantic search finds conceptually similar content",
+    "Python is a popular programming language",
+    "Docker makes deployment easier",
+]
+
+def embed(text: str) -> DenseVector:
+    """Convert text to vector embedding."""
+    embedding = model.encode(text).tolist()
+    return DenseVector(embedding)
+
+# Connect to VortexDB (DIMENSION must be 384 for MiniLM)
+with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
+    
+    # Index documents
+    print("Indexing documents...")
+    for doc in documents:
+        point_id = db.insert(
+            vector=embed(doc),
+            payload=Payload.text(doc)
+        )
+        print(f"  Indexed: {doc[:50]}...")
+    
+    # Search
+    query = "How do I store vectors?"
+    print(f"\nSearching for: '{query}'")
+    
+    results = db.search(
+        vector=embed(query),
+        similarity=Similarity.COSINE,
+        limit=3
+    )
+    
+    print("\nTop 3 results:")
+    for i, point_id in enumerate(results, 1):
+        point = db.get(point_id=point_id)
+        print(f"  {i}. {point.payload.content}")
+```
+
+Output:
+```
+Indexing documents...
+  Indexed: VortexDB is a vector database built in Rust...
+  Indexed: Machine learning models convert text to embe...
+  Indexed: Semantic search finds conceptually similar c...
+  Indexed: Python is a popular programming language...
+  Indexed: Docker makes deployment easier...
+
+Searching for: 'How do I store vectors?'
+
+Top 3 results:
+  1. VortexDB is a vector database built in Rust
+  2. Machine learning models convert text to embeddings
+  3. Semantic search finds conceptually similar content
+```
+
+## Batch Operations
+
+For bulk inserts, process documents in batches:
+
+```python
+def batch_insert(db, documents, batch_size=100):
+    """Insert documents in batches."""
+    point_ids = []
+    
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i:i + batch_size]
+        
+        for doc in batch:
+            pid = db.insert(
+                vector=embed(doc),
+                payload=Payload.text(doc)
+            )
+            point_ids.append(pid)
+        
+        print(f"Inserted {min(i + batch_size, len(documents))}/{len(documents)}")
+    
+    return point_ids
+
+# Usage
+with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
+    ids = batch_insert(db, large_document_list)
+```
+
+## Integration Examples
+
+### FastAPI Endpoint
+
+```python
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+app = FastAPI()
+db = VortexDB(grpc_url="localhost:50051", api_key="secret")
+
+class SearchQuery(BaseModel):
+    vector: list[float]
+    limit: int = 10
+
+@app.post("/search")
+async def search(query: SearchQuery):
+    results = db.search(
+        vector=DenseVector(query.vector),
+        similarity=Similarity.COSINE,
+        limit=query.limit
+    )
+    return {"results": results}
+
+@app.on_event("shutdown")
+def shutdown():
+    db.close()
+```
+
+### LangChain Integration
+
+```python
+from langchain.vectorstores.base import VectorStore
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+class VortexDBVectorStore(VectorStore):
+    def __init__(self, grpc_url: str, api_key: str, embeddings):
+        self.db = VortexDB(grpc_url=grpc_url, api_key=api_key)
+        self.embeddings = embeddings
+    
+    def add_texts(self, texts, metadatas=None):
+        ids = []
+        for i, text in enumerate(texts):
+            embedding = self.embeddings.embed_query(text)
+            pid = self.db.insert(
+                vector=DenseVector(embedding),
+                payload=Payload.text(text)
+            )
+            ids.append(pid)
+        return ids
+    
+    def similarity_search(self, query, k=4):
+        embedding = self.embeddings.embed_query(query)
+        results = self.db.search(
+            vector=DenseVector(embedding),
+            similarity=Similarity.COSINE,
+            limit=k
+        )
+        return [self.db.get(point_id=pid) for pid in results]
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SDK Reference" icon="book" href="/sdk/reference">
+    Complete API documentation
+  </Card>
+  <Card title="TUI Walkthrough" icon="terminal" href="/guides/tui-walkthrough">
+    Use the terminal interface
+  </Card>
+</CardGroup>

@@ -1,0 +1,236 @@
+---
+title: "Quickstart"
+description: "Insert your first vector in 60 seconds"
+---
+
+# Quickstart
+
+This guide will have you inserting and searching vectors in under 60 seconds.
+
+## Prerequisites
+
+Make sure VortexDB is running (see [Installation](/getting-started/installation)).
+
+## Insert Your First Vector
+
+<Tabs>
+  <Tab title="Python SDK">
+    ```python
+    from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+    # Connect to VortexDB
+    db = VortexDB(
+        grpc_url="localhost:50051",
+        api_key="your-secure-password"
+    )
+
+    # Insert a vector with a text payload
+    point_id = db.insert(
+        vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+        payload=Payload.text("Hello, VortexDB!")
+    )
+    print(f"Inserted point: {point_id}")
+
+    # Clean up
+    db.close()
+    ```
+  </Tab>
+  <Tab title="HTTP API">
+    ```bash
+    curl -X POST http://localhost:3000/points \
+      -H "Content-Type: application/json" \
+      -d '{
+        "vector": [0.1, 0.2, 0.3, 0.4],
+        "payload": {
+          "content_type": "Text",
+          "content": "Hello, VortexDB!"
+        }
+      }'
+    ```
+    
+    Response:
+    ```json
+    {
+      "point_id": "550e8400-e29b-41d4-a716-446655440000"
+    }
+    ```
+  </Tab>
+  <Tab title="gRPC">
+    ```protobuf
+    // Using grpcurl
+    grpcurl -plaintext \
+      -H "authorization: your-secure-password" \
+      -d '{
+        "vector": {"values": [0.1, 0.2, 0.3, 0.4]},
+        "payload": {"content_type": 1, "content": "Hello, VortexDB!"}
+      }' \
+      localhost:50051 vectordb.VectorDB/InsertVector
+    ```
+  </Tab>
+</Tabs>
+
+## Search for Similar Vectors
+
+<Tabs>
+  <Tab title="Python SDK">
+    ```python
+    from vortexdb import VortexDB, DenseVector, Similarity
+
+    db = VortexDB(
+        grpc_url="localhost:50051",
+        api_key="your-secure-password"
+    )
+
+    # Search for 5 most similar vectors using cosine similarity
+    results = db.search(
+        vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+        similarity=Similarity.COSINE,
+        limit=5
+    )
+
+    print(f"Found {len(results)} similar vectors:")
+    for point_id in results:
+        print(f"  - {point_id}")
+
+    db.close()
+    ```
+  </Tab>
+  <Tab title="HTTP API">
+    ```bash
+    curl -X POST http://localhost:3000/points/search \
+      -H "Content-Type: application/json" \
+      -d '{
+        "vector": [0.1, 0.2, 0.3, 0.4],
+        "similarity": "Cosine",
+        "limit": 5
+      }'
+    ```
+    
+    Response:
+    ```json
+    {
+      "results": [
+        "550e8400-e29b-41d4-a716-446655440000",
+        "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Retrieve a Point
+
+<Tabs>
+  <Tab title="Python SDK">
+    ```python
+    # Get the point you just inserted
+    point = db.get(point_id=point_id)
+
+    if point:
+        print(point.pretty())
+        # Output:
+        # Point ID: 550e8400-e29b-41d4-a716-446655440000
+        # Vector: [0.1, 0.2, 0.3, 0.4]
+        # Payload: Hello, VortexDB!
+    ```
+  </Tab>
+  <Tab title="HTTP API">
+    ```bash
+    curl http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000
+    ```
+    
+    Response:
+    ```json
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "vector": [0.1, 0.2, 0.3, 0.4],
+      "payload": {
+        "content_type": "Text",
+        "content": "Hello, VortexDB!"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Delete a Point
+
+<Tabs>
+  <Tab title="Python SDK">
+    ```python
+    db.delete(point_id=point_id)
+    print("Point deleted successfully")
+    ```
+  </Tab>
+  <Tab title="HTTP API">
+    ```bash
+    curl -X DELETE http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000
+    ```
+  </Tab>
+</Tabs>
+
+## Complete Example
+
+Here's a complete example using the Python SDK with context manager:
+
+```python
+from vortexdb import VortexDB, DenseVector, Payload, Similarity
+
+# Using context manager for automatic cleanup
+with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
+    # Insert some vectors
+    vectors = [
+        ([0.1, 0.2, 0.3, 0.4], "First document"),
+        ([0.2, 0.3, 0.4, 0.5], "Second document"),
+        ([0.9, 0.8, 0.7, 0.6], "Third document"),
+    ]
+
+    point_ids = []
+    for vec, text in vectors:
+        pid = db.insert(
+            vector=DenseVector(vec),
+            payload=Payload.text(text)
+        )
+        point_ids.append(pid)
+        print(f"Inserted: {text} -> {pid}")
+
+    # Search for vectors similar to the first one
+    results = db.search(
+        vector=DenseVector([0.15, 0.25, 0.35, 0.45]),
+        similarity=Similarity.COSINE,
+        limit=2
+    )
+
+    print(f"\nTop 2 similar vectors:")
+    for pid in results:
+        point = db.get(point_id=pid)
+        print(f"  - {point.payload.content}")
+```
+
+## Distance Metrics
+
+VortexDB supports four distance/similarity metrics:
+
+| Metric | Description | Best For |
+|--------|-------------|----------|
+| `COSINE` | Measures angle between vectors | Text embeddings, normalized vectors |
+| `EUCLIDEAN` | L2 distance (straight line) | General purpose |
+| `MANHATTAN` | L1 distance (city block) | Sparse vectors |
+| `HAMMING` | Count of differing elements | Binary vectors |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Understand how VortexDB works under the hood
+  </Card>
+  <Card title="Indexers" icon="magnifying-glass" href="/concepts/indexers">
+    Choose the right index for your use case
+  </Card>
+  <Card title="Python SDK Guide" icon="python" href="/guides/python-sdk">
+    Build a semantic search application
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/overview">
+    Explore the complete API
+  </Card>
+</CardGroup>

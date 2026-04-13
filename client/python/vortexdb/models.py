@@ -70,7 +70,9 @@ class DenseVector:
     def to_list(self) -> list[float]:
         return list(self.values)
 
-
+# & Helper Function for Batch of DenseVectors
+def to_dense_vectors(arr):
+    return [DenseVector(x) for x in arr]
 
 
 @dataclass(frozen=True)
@@ -128,4 +130,18 @@ class Point:
             f" vector = {self.vector},\n"
             f" payload_type = {self.payload.content_type.name},\n"
             f" payload = '{self.payload.content}'"
+        )
+
+# I added this because using tuples will get messy if we increase fields in a search query
+@dataclass(frozen=True)
+class SearchQuery:
+    vector: DenseVector
+    similarity: Similarity
+    limit: int
+
+    def to_proto(self) -> vector_db_pb2.SearchRequest:
+        return vector_db_pb2.SearchRequest(
+            query_vector=self.vector.to_proto(),
+            similarity=self.similarity.to_proto(),
+            limit=self.limit,
         )

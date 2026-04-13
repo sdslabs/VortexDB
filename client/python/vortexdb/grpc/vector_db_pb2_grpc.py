@@ -4,7 +4,7 @@ import grpc
 import warnings
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from vortexdb.grpc import vector_db_pb2 as vector__db__pb2
+from . import vector_db_pb2 as vector__db__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -55,6 +55,16 @@ class VectorDBStub(object):
                 request_serializer=vector__db__pb2.SearchRequest.SerializeToString,
                 response_deserializer=vector__db__pb2.SearchResponse.FromString,
                 _registered_method=True)
+        self.InsertVectorsBatch = channel.unary_unary(
+                '/vectordb.VectorDB/InsertVectorsBatch',
+                request_serializer=vector__db__pb2.InsertVectorsBatchRequest.SerializeToString,
+                response_deserializer=vector__db__pb2.InsertVectorsBatchResponse.FromString,
+                _registered_method=True)
+        self.SearchPointsBatch = channel.unary_unary(
+                '/vectordb.VectorDB/SearchPointsBatch',
+                request_serializer=vector__db__pb2.SearchPointsBatchRequest.SerializeToString,
+                response_deserializer=vector__db__pb2.SearchPointsBatchResponse.FromString,
+                _registered_method=True)
 
 
 class VectorDBServicer(object):
@@ -88,6 +98,18 @@ class VectorDBServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def InsertVectorsBatch(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SearchPointsBatch(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_VectorDBServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -110,6 +132,16 @@ def add_VectorDBServicer_to_server(servicer, server):
                     servicer.SearchPoints,
                     request_deserializer=vector__db__pb2.SearchRequest.FromString,
                     response_serializer=vector__db__pb2.SearchResponse.SerializeToString,
+            ),
+            'InsertVectorsBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.InsertVectorsBatch,
+                    request_deserializer=vector__db__pb2.InsertVectorsBatchRequest.FromString,
+                    response_serializer=vector__db__pb2.InsertVectorsBatchResponse.SerializeToString,
+            ),
+            'SearchPointsBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.SearchPointsBatch,
+                    request_deserializer=vector__db__pb2.SearchPointsBatchRequest.FromString,
+                    response_serializer=vector__db__pb2.SearchPointsBatchResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -220,6 +252,60 @@ class VectorDB(object):
             '/vectordb.VectorDB/SearchPoints',
             vector__db__pb2.SearchRequest.SerializeToString,
             vector__db__pb2.SearchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def InsertVectorsBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/vectordb.VectorDB/InsertVectorsBatch',
+            vector__db__pb2.InsertVectorsBatchRequest.SerializeToString,
+            vector__db__pb2.InsertVectorsBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SearchPointsBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/vectordb.VectorDB/SearchPointsBatch',
+            vector__db__pb2.SearchPointsBatchRequest.SerializeToString,
+            vector__db__pb2.SearchPointsBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -5,6 +5,7 @@ from vortexdb.client import VortexDB
 from vortexdb.connection import GRPCConnection
 from vortexdb.models import DenseVector, Payload, Similarity, ContentType, Point
 from vortexdb.exceptions import InvalidArgumentError
+from vortexdb.models import SearchQuery
 
 
 
@@ -45,13 +46,47 @@ def test_insert_success(client, mock_connection):
     assert point_id == "point-123"
 
 
-
 def test_insert_rejects_invalid_vector(client):
     with pytest.raises(TypeError):
         client.insert(
             vector=[1, 2, 3],  # not DenseVector
             payload=Payload.text("hello"),
         )
+
+
+# Batch Insert
+
+def test_batch_insert_success(client, mock_connection):
+    response = Mock()
+    response.ids = [
+        Mock(id=Mock(value="p1")),
+        Mock(id=Mock(value="p2")),
+    ]
+    mock_connection.call.return_value = response
+    items = [
+        (DenseVector([1, 2, 3]), Payload.text("a")),
+        (DenseVector([4, 5, 6]), Payload.text("b")),
+    ]
+    result = client.batch_insert(items=items)
+    assert result == ["p1", "p2"]
+
+def test_batch_insert_invalid_items_type(client):
+    with pytest.raises(TypeError):
+        client.batch_insert(items="not-a-list")
+
+def test_batch_insert_invalid_tuple_structure(client):
+    items = [
+        (DenseVector([1, 2, 3]),),  # only one element
+    ]
+    with pytest.raises(TypeError):
+        client.batch_insert(items=items)
+
+def test_batch_insert_invalid_vector(client):
+    items = [
+        ([1, 2, 3], Payload.text("a")),  # not DenseVector
+    ]
+    with pytest.raises(TypeError):
+        client.batch_insert(items=items)
 
 
 # Get
@@ -117,6 +152,80 @@ def test_search_invalid_vector(client):
             limit=2,
         )
 
+
+# Batch Search
+
+def test_batch_search_full_tuple(client, mock_connection):
+    mock_connection.call.return_value = Mock(
+        results=[
+            Mock(result_point_ids=[Mock(id=Mock(value="p1"))]),
+            Mock(result_point_ids=[Mock(id=Mock(value="p2"))]),
+        ]
+    )
+    queries = [
+        (DenseVector([1, 2, 3]), Similarity.COSINE, 2),
+        (DenseVector([4, 5, 6]), Similarity.EUCLIDEAN, 1),
+    ]
+    result = client.batch_search(queries=queries)
+    assert result == [["p1"], ["p2"]]
+
+def test_batch_search_vectors_with_global_params(client, mock_connection):
+    mock_connection.call.return_value = Mock(
+        results=[
+            Mock(result_point_ids=[Mock(id=Mock(value="p1"))]),
+        ]
+    )
+    queries = [DenseVector([1, 2, 3])]
+    result = client.batch_search(
+        queries=queries,
+        similarity=Similarity.MANHATTAN,
+        limit=2,
+    )
+    assert result == [["p1"]]
+
+def test_batch_search_vector_similarity_with_global_limit(client, mock_connection):
+    mock_connection.call.return_value = Mock(
+        results=[
+            Mock(result_point_ids=[Mock(id=Mock(value="p1"))]),
+        ]
+    )
+    queries = [
+        (DenseVector([1, 2, 3]), Similarity.COSINE),
+    ]
+    result = client.batch_search(
+        queries=queries,
+        limit=2,
+    )
+    assert result == [["p1"]]
+
+def test_batch_search_searchquery_objects(client, mock_connection):
+    mock_connection.call.return_value = Mock(
+        results=[
+            Mock(result_point_ids=[Mock(id=Mock(value="p1"))]),
+        ]
+    )
+    queries = [
+        SearchQuery(DenseVector([1, 2, 3]), Similarity.COSINE, 2),
+    ]
+    result = client.batch_search(queries=queries)
+    assert result == [["p1"]]
+
+def test_batch_search_missing_globals_for_vector(client):
+    queries = [DenseVector([1, 2, 3])]
+    with pytest.raises(ValueError):
+        client.batch_search(queries=queries)
+
+def test_batch_search_missing_limit(client):
+    queries = [
+        (DenseVector([1, 2, 3]), Similarity.COSINE),
+    ]
+    with pytest.raises(ValueError):
+        client.batch_search(queries=queries)
+
+def test_batch_search_invalid_format(client):
+    queries = ["invalid"]
+    with pytest.raises(TypeError):
+        client.batch_search(queries=queries)
 
 # Close
 

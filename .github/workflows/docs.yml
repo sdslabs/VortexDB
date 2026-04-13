@@ -3,7 +3,12 @@ name: Deploy Docs
 on:
   push:
     branches:
-      - main
+      - refactor
+    paths:
+      - 'docs/**'
+  pull_request:
+    branches:
+      - refactor
     paths:
       - 'docs/**'
   workflow_dispatch:
@@ -33,22 +38,33 @@ jobs:
       - name: Install Mintlify CLI
         run: npm install -g mintlify
 
-      - name: Build Docs
+      - name: Export Docs
         working-directory: docs
-        run: mintlify build
+        run: mintlify export
+
+      - name: Unzip Export
+        working-directory: docs
+        run: unzip export.zip -d site
+
+      - name: Add SPA fallback
+        run: |
+          cp docs/site/index.html docs/site/404.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/.mintlify/
+          path: docs/site
 
   deploy:
     name: Deploy to GitHub Pages
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
+
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

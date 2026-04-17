@@ -3,6 +3,7 @@ pub mod handler;
 use api::VectorDb;
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, post},
 };
 use defs::BoxError;
@@ -36,6 +37,7 @@ pub fn create_router(db: Arc<VectorDb>) -> Router {
         .route("/points/batch", post(batch_insert_handler))
         .route("/points/search/batch", post(batch_search_handler))
         .with_state(app_state)
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB limit
 }
 
 /// Runs the HTTP server on the specified address.

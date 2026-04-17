@@ -1,0 +1,35 @@
+services:
+  vortexdb:
+    build: ../../
+    image: vortexdb:latest
+    container_name: vortexdb
+    environment:
+      HTTP_HOST: "0.0.0.0"
+      HTTP_PORT: "3000"
+      STORAGE_TYPE: rocksdb
+      INDEX_TYPE: hnsw
+      DIMENSION: 1536
+      SIMILARITY: cosine
+      LOGGING: "true"
+      GRPC_ROOT_PASSWORD: vortexdb-secret
+      DISABLE_HTTP: "false"
+    ports:
+      - "3034:3000"
+
+  backend:
+    build: ./backend
+    env_file:
+      - .env
+    environment:
+      VORTEXDB_HOST: vortexdb
+      VORTEXDB_PORT: 3000
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    depends_on:
+      - vortexdb
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3035:80"
+    depends_on:
+      - backend

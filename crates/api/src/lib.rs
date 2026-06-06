@@ -10,8 +10,7 @@ use std::sync::{Arc, RwLock};
 use index::flat::index::FlatIndex;
 use index::{IndexType, VectorIndex};
 use snapshot::Snapshot;
-use storage::rocks_db::RocksDbStorage;
-use storage::{StorageEngine, StorageType, VectorPage};
+use storage::{StorageEngine, StorageType, VectorPage, create_storage_engine};
 
 use uuid::Uuid;
 
@@ -252,10 +251,7 @@ pub fn restore_from_snapshot(config: &DbRestoreConfig) -> Result<VectorDb, DbErr
 
 pub fn init_api(config: DbConfig) -> Result<VectorDb> {
     // Initialize the storage engine
-    let storage = match config.storage_type {
-        StorageType::RocksDb => Arc::new(RocksDbStorage::new(config.data_path)?),
-        _ => Arc::new(RocksDbStorage::new(config.data_path)?),
-    };
+    let storage = create_storage_engine(config.storage_type, config.data_path)?;
 
     // Initialize the vector index
     let index: Arc<RwLock<dyn VectorIndex>> = match config.index_type {
@@ -290,15 +286,26 @@ mod tests {
 
     // Helper function to create a test database
     fn create_test_db() -> (VectorDb, TempDir) {
+        create_test_db_with_storage(StorageType::RocksDb)
+    }
+
+    fn create_test_db_with_storage(storage_type: StorageType) -> (VectorDb, TempDir) {
         let temp_dir = tempdir().unwrap();
         let config = DbConfig {
-            storage_type: StorageType::RocksDb,
+            storage_type,
             index_type: IndexType::Flat,
             data_path: temp_dir.path().to_path_buf(),
             dimension: 3,
             similarity: Similarity::Cosine,
         };
         (init_api(config).unwrap(), temp_dir)
+    }
+
+    fn test_payload(content: &str) -> Payload {
+        Payload {
+            content_type: ContentType::Text,
+            content: content.to_string(),
+        }
     }
 
     #[test]
@@ -324,6 +331,20 @@ mod tests {
             ContentType::Text
         );
         assert_eq!(point.payload.as_ref().unwrap().content, "Test content");
+    }
+
+    #[test]
+    fn test_insert_and_get_with_in_memory_storage() {
+        let (db, _temp_dir) = create_test_db_with_storage(StorageType::InMemory);
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = test_payload("Test content");
+
+        let id = db.insert(vector.clone(), payload.clone()).unwrap();
+        let point = db.get(id).unwrap().unwrap();
+
+        assert_eq!(point.id, id);
+        assert_eq!(point.vector, Some(vector));
+        assert_eq!(point.payload, Some(payload));
     }
 
     #[test]
@@ -591,6 +612,34 @@ mod tests {
         // vector restore check
         assert!(loaded_db.get(id1).unwrap().unwrap().vector.unwrap() == v1);
         assert!(loaded_db.get(id2).unwrap().unwrap().vector.unwrap() == v2);
+    }
+
+    #[test]
+    fn test_create_and_load_snapshot_with_in_memory_storage() {
+        let (old_db, temp_dir) = create_test_db_with_storage(StorageType::InMemory);
+
+        let v1 = vec![0.0, 1.0, 2.0];
+        let v2 = vec![3.0, 4.0, 5.0];
+        let v3 = vec![6.0, 7.0, 8.0];
+
+        let id1 = old_db.insert(v1.clone(), test_payload("one")).unwrap();
+        let id2 = old_db.insert(v2.clone(), test_payload("two")).unwrap();
+
+        let temp_snapshot_dir = tempdir().unwrap();
+        let snapshot_path = old_db.create_snapshot(temp_snapshot_dir.path()).unwrap();
+
+        let id3 = old_db.insert(v3, test_payload("three")).unwrap();
+
+        let reload_config = DbRestoreConfig {
+            data_path: temp_dir.path().to_path_buf(),
+            snapshot_path,
+        };
+
+        let loaded_db = restore_from_snapshot(&reload_config).unwrap();
+
+        assert_eq!(loaded_db.get(id1).unwrap().unwrap().vector, Some(v1));
+        assert_eq!(loaded_db.get(id2).unwrap().unwrap().vector, Some(v2));
+        assert!(loaded_db.get(id3).unwrap().is_none());
     }
 
     #[test]

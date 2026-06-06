@@ -149,7 +149,10 @@ fn api_error_to_response(err: &ApiError) -> (StatusCode, String) {
             | StorageError::RocksDbFlush { .. }
             | StorageError::RocksDbInitialization { .. }
             | StorageError::RocksDbCheckpointMsg { .. }
-            | StorageError::RocksDbCheckpointIo { .. } => {
+            | StorageError::RocksDbCheckpointIo { .. }
+            | StorageError::InMemoryLock { .. }
+            | StorageError::InMemoryCheckpoint { .. }
+            | StorageError::InMemoryCheckpointIo { .. } => {
                 (StatusCode::INTERNAL_SERVER_ERROR, source.to_string())
             }
         },

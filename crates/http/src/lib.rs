@@ -46,3 +46,67 @@ pub async fn run_http_server(db: Arc<VectorDb>, addr: SocketAddr) -> Result<(), 
     axum::serve(listener, app.into_make_service()).await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use api::DbConfig;
+    use axum::http::StatusCode;
+    use axum_test::TestServer;
+    use defs::Similarity;
+    use index::IndexType;
+    use serde_json::json;
+    use storage::StorageType;
+
+    #[tokio::test]
+    async fn in_memory_storage_http_smoke_test() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db = api::init_api(DbConfig {
+            storage_type: StorageType::InMemory,
+            index_type: IndexType::Flat,
+            data_path: temp_dir.path().to_path_buf(),
+            dimension: 3,
+            similarity: Similarity::Cosine,
+        })
+        .unwrap();
+        let server = TestServer::new(create_router(Arc::new(db))).unwrap();
+
+        let insert_response = server
+            .post("/points")
+            .json(&json!({
+                "vector": [1.0, 0.0, 0.0],
+                "payload": {
+                    "content_type": "Text",
+                    "content": "smoke-test"
+                }
+            }))
+            .await;
+        insert_response.assert_status(StatusCode::CREATED);
+        let insert_body: serde_json::Value = insert_response.json();
+        let point_id = insert_body["point_id"].as_str().unwrap();
+
+        let get_response = server.get(&format!("/points/{point_id}")).await;
+        get_response.assert_status_ok();
+        let point_body: serde_json::Value = get_response.json();
+        assert_eq!(point_body["payload"]["content"], "smoke-test");
+        assert_eq!(point_body["vector"], json!([1.0, 0.0, 0.0]));
+
+        let search_response = server
+            .post("/points/search")
+            .json(&json!({
+                "vector": [1.0, 0.0, 0.0],
+                "similarity": "Cosine",
+                "limit": 1
+            }))
+            .await;
+        search_response.assert_status_ok();
+        let search_body: serde_json::Value = search_response.json();
+        assert_eq!(search_body["results"], json!([point_id]));
+
+        let delete_response = server.delete(&format!("/points/{point_id}")).await;
+        delete_response.assert_status(StatusCode::NO_CONTENT);
+
+        let missing_response = server.get(&format!("/points/{point_id}")).await;
+        missing_response.assert_status(StatusCode::NOT_FOUND);
+    }
+}

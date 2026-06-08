@@ -1,0 +1,72 @@
+from typing import Any, Callable
+
+import grpc
+
+from vortexdb.config import VortexDBConfig
+from vortexdb.exceptions import (
+    AuthenticationError,
+    InternalServerError,
+    InvalidArgumentError,
+    NotFoundError,
+    ServiceUnavailableError,
+    TimeoutError,
+    VortexDBError,
+)
+from vortexdb.grpc.vector_db_pb2_grpc import VectorDBStub
+
+
+class AsyncGRPCConnection:
+    """Async gRPC connection wrapper for VortexDB."""
+
+    def __init__(self, config: VortexDBConfig):
+        self._config = config
+        self._channel = grpc.aio.insecure_channel(config.grpc_url)
+        self._stub = VectorDBStub(self._channel)
+        self._metadata = (
+            ("authorization", f"Bearer {config.api_key}"),
+        )
+
+    @property
+    def stub(self) -> VectorDBStub:
+        return self._stub
+
+    async def call(
+        self,
+        rpc: Callable[..., Any],
+        request: Any,
+    ) -> Any:
+        """Execute an async gRPC call with standard error handling."""
+        try:
+            return await rpc(
+                request,
+                timeout=self._config.timeout,
+                metadata=self._metadata,
+            )
+
+        except grpc.aio.AioRpcError as e:
+            raise self._map_grpc_error(e) from e
+
+    async def close(self) -> None:
+        """Close the underlying async gRPC channel."""
+        await self._channel.close()
+
+    @staticmethod
+    def _map_grpc_error(error: grpc.aio.AioRpcError) -> VortexDBError:
+        code = error.code()
+
+        if code == grpc.StatusCode.UNAUTHENTICATED:
+            return AuthenticationError(error.details())
+
+        if code == grpc.StatusCode.NOT_FOUND:
+            return NotFoundError(error.details())
+
+        if code == grpc.StatusCode.INVALID_ARGUMENT:
+            return InvalidArgumentError(error.details())
+
+        if code == grpc.StatusCode.DEADLINE_EXCEEDED:
+            return TimeoutError(error.details())
+
+        if code == grpc.StatusCode.UNAVAILABLE:
+            return ServiceUnavailableError(error.details())
+
+        return InternalServerError(error.details())

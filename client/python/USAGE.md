@@ -39,6 +39,24 @@ The client supports usage as a context manager, which automatically closes the u
 Example available in:  
 ```examples/context_manager_usage.py```
 
+### Async Client Support
+
+For async applications, use `AsyncVortexDB`. It mirrors the synchronous client API and uses `grpc.aio` under the hood.
+
+Example available in:
+```examples/async_usage.py```
+
+```python
+async with AsyncVortexDB(
+    grpc_url="localhost:50051",
+    api_key="your-api-key",
+) as db:
+    point_id = await db.insert(
+        vector=DenseVector([0.1, 0.2, 0.3]),
+        payload=Payload.text("hello async vortex"),
+    )
+```
+
 ---
 
 ## Client API
@@ -46,6 +64,25 @@ Example available in:
 ### `VortexDB`
 
 Main client class for interacting with the VortexDB gRPC server.
+
+### `AsyncVortexDB`
+
+Async client class for I/O-heavy applications. It has the same constructor and method names as `VortexDB`, but methods are awaitable:
+
+```
+await db.insert(...)
+await db.get(...)
+await db.search(...)
+await db.delete(...)
+await db.close()
+```
+
+It also supports async context manager usage:
+
+```
+async with AsyncVortexDB(...) as db:
+    ...
+```
 
 #### **Constructor**
 

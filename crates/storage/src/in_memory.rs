@@ -5,12 +5,15 @@ use bincode::{deserialize_from, serialize_into};
 use defs::{DenseVector, Payload, Point, PointId};
 use std::collections::BTreeMap;
 use std::fs::File;
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::ops::Bound::{Excluded, Unbounded};
 use std::path::Path;
 use std::sync::RwLock;
 
 pub const INMEMORY_CHECKPOINT_FILENAME_MARKER: &str = "inmemory";
 const INMEMORY_CHECKPOINT_EXTENSION: &str = "bin";
+const INMEMORY_CHECKPOINT_MAGIC: &[u8; 8] = b"VDBIMCP\0";
+const INMEMORY_CHECKPOINT_VERSION: u16 = 1;
 
 pub struct MemoryStorage {
     points: RwLock<BTreeMap<PointId, Point>>,
@@ -123,14 +126,33 @@ impl StorageEngine for MemoryStorage {
                 source,
             }
         })?;
+        let mut writer = BufWriter::new(file);
         let points = self
             .points
             .read()
             .map_err(|_| StorageError::InMemoryLock {})?;
-        serialize_into(file, &*points).map_err(|source| StorageError::Serialization {
-            id: PointId::nil(),
-            source,
-        })?;
+        writer
+            .write_all(INMEMORY_CHECKPOINT_MAGIC)
+            .and_then(|_| writer.write_all(&INMEMORY_CHECKPOINT_VERSION.to_le_bytes()))
+            .and_then(|_| writer.write_all(&(points.len() as u64).to_le_bytes()))
+            .map_err(|source| StorageError::InMemoryCheckpointIo {
+                msg: "Couldn't write in-memory checkpoint header".to_string(),
+                source,
+            })?;
+
+        for point in points.values() {
+            serialize_into(&mut writer, point).map_err(|source| StorageError::Serialization {
+                id: point.id,
+                source,
+            })?;
+        }
+
+        writer
+            .flush()
+            .map_err(|source| StorageError::InMemoryCheckpointIo {
+                msg: "Couldn't flush in-memory checkpoint".to_string(),
+                source,
+            })?;
 
         Ok(StorageCheckpoint {
             path: checkpoint_path,
@@ -169,11 +191,52 @@ impl StorageEngine for MemoryStorage {
                 msg: "Couldn't open in-memory checkpoint".to_string(),
                 source,
             })?;
-        let restored_points: BTreeMap<PointId, Point> =
-            deserialize_from(file).map_err(|source| StorageError::Deserialization {
-                id: PointId::nil(),
+        let mut reader = BufReader::new(file);
+        let mut magic = [0u8; INMEMORY_CHECKPOINT_MAGIC.len()];
+        reader
+            .read_exact(&mut magic)
+            .map_err(|source| StorageError::InMemoryCheckpointIo {
+                msg: "Couldn't read in-memory checkpoint magic".to_string(),
                 source,
             })?;
+        if &magic != INMEMORY_CHECKPOINT_MAGIC {
+            return Err(StorageError::InMemoryCheckpoint {
+                msg: "Invalid checkpoint magic".to_string(),
+            });
+        }
+
+        let mut version_bytes = [0u8; size_of::<u16>()];
+        reader.read_exact(&mut version_bytes).map_err(|source| {
+            StorageError::InMemoryCheckpointIo {
+                msg: "Couldn't read in-memory checkpoint version".to_string(),
+                source,
+            }
+        })?;
+        let version = u16::from_le_bytes(version_bytes);
+        if version != INMEMORY_CHECKPOINT_VERSION {
+            return Err(StorageError::InMemoryCheckpoint {
+                msg: format!("Unsupported checkpoint version: {version}"),
+            });
+        }
+
+        let mut count_bytes = [0u8; size_of::<u64>()];
+        reader.read_exact(&mut count_bytes).map_err(|source| {
+            StorageError::InMemoryCheckpointIo {
+                msg: "Couldn't read in-memory checkpoint point count".to_string(),
+                source,
+            }
+        })?;
+        let point_count = u64::from_le_bytes(count_bytes);
+        let mut restored_points = BTreeMap::new();
+        for _ in 0..point_count {
+            let point: Point =
+                deserialize_from(&mut reader).map_err(|source| StorageError::Deserialization {
+                    id: PointId::nil(),
+                    source,
+                })?;
+            restored_points.insert(point.id, point);
+        }
+
         let mut points = self
             .points
             .write()
@@ -187,6 +250,7 @@ impl StorageEngine for MemoryStorage {
 mod tests {
     use super::*;
     use defs::ContentType;
+    use std::io::{Read, Write};
     use tempfile::{TempDir, tempdir};
     use uuid::Uuid;
 
@@ -316,5 +380,53 @@ mod tests {
             storage.get_payload(id_before_checkpoint).unwrap(),
             Some(test_payload("before"))
         );
+    }
+
+    #[test]
+    fn test_checkpoint_writes_header() {
+        let storage = create_test_storage();
+        let temp_dir = tempdir().unwrap();
+        let id = Uuid::new_v4();
+
+        storage
+            .insert_point(id, Some(vec![0.1, 0.2, 0.3]), Some(test_payload("point")))
+            .unwrap();
+        let checkpoint = storage.checkpoint_at(temp_dir.path()).unwrap();
+
+        let mut file = File::open(checkpoint.path).unwrap();
+        let mut magic = [0u8; INMEMORY_CHECKPOINT_MAGIC.len()];
+        file.read_exact(&mut magic).unwrap();
+        assert_eq!(&magic, INMEMORY_CHECKPOINT_MAGIC);
+
+        let mut version_bytes = [0u8; size_of::<u16>()];
+        file.read_exact(&mut version_bytes).unwrap();
+        assert_eq!(
+            u16::from_le_bytes(version_bytes),
+            INMEMORY_CHECKPOINT_VERSION
+        );
+
+        let mut count_bytes = [0u8; size_of::<u64>()];
+        file.read_exact(&mut count_bytes).unwrap();
+        assert_eq!(u64::from_le_bytes(count_bytes), 1);
+    }
+
+    #[test]
+    fn test_restore_rejects_invalid_checkpoint_magic() {
+        let mut storage = create_test_storage();
+        let temp_dir = tempdir().unwrap();
+        let checkpoint_path = temp_dir.path().join("inmemory-invalid.bin");
+        let mut file = File::create(&checkpoint_path).unwrap();
+        file.write_all(b"BADMAGIC").unwrap();
+        file.write_all(&INMEMORY_CHECKPOINT_VERSION.to_le_bytes())
+            .unwrap();
+        file.write_all(&0u64.to_le_bytes()).unwrap();
+
+        let checkpoint = StorageCheckpoint {
+            path: checkpoint_path,
+            storage_type: StorageType::InMemory,
+        };
+
+        let error = storage.restore_checkpoint(&checkpoint).unwrap_err();
+        assert!(matches!(error, StorageError::InMemoryCheckpoint { .. }));
     }
 }

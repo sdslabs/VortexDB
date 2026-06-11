@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import grpc
 
+from vortexdb._grpc_common import map_grpc_error
 from vortexdb.async_connection import AsyncGRPCConnection
 from vortexdb.config import VortexDBConfig
 from vortexdb.exceptions import (
@@ -86,7 +87,7 @@ def test_async_grpc_error_mapping():
 
     for status_code, expected_exception in cases:
         error = FakeAioRpcError(status_code, "boom")
-        mapped = AsyncGRPCConnection._map_grpc_error(error)
+        mapped = map_grpc_error(error)
         assert isinstance(mapped, expected_exception)
 
 

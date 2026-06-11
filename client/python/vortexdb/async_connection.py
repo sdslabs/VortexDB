@@ -2,16 +2,8 @@ from typing import Any, Callable
 
 import grpc
 
+from vortexdb._grpc_common import build_auth_metadata, map_grpc_error
 from vortexdb.config import VortexDBConfig
-from vortexdb.exceptions import (
-    AuthenticationError,
-    InternalServerError,
-    InvalidArgumentError,
-    NotFoundError,
-    ServiceUnavailableError,
-    TimeoutError,
-    VortexDBError,
-)
 from vortexdb.grpc.vector_db_pb2_grpc import VectorDBStub
 
 
@@ -22,9 +14,7 @@ class AsyncGRPCConnection:
         self._config = config
         self._channel = grpc.aio.insecure_channel(config.grpc_url)
         self._stub = VectorDBStub(self._channel)
-        self._metadata = (
-            ("authorization", f"Bearer {config.api_key}"),
-        )
+        self._metadata = build_auth_metadata(config.api_key)
 
     @property
     def stub(self) -> VectorDBStub:
@@ -44,29 +34,8 @@ class AsyncGRPCConnection:
             )
 
         except grpc.aio.AioRpcError as e:
-            raise self._map_grpc_error(e) from e
+            raise map_grpc_error(e) from e
 
     async def close(self) -> None:
         """Close the underlying async gRPC channel."""
         await self._channel.close()
-
-    @staticmethod
-    def _map_grpc_error(error: grpc.aio.AioRpcError) -> VortexDBError:
-        code = error.code()
-
-        if code == grpc.StatusCode.UNAUTHENTICATED:
-            return AuthenticationError(error.details())
-
-        if code == grpc.StatusCode.NOT_FOUND:
-            return NotFoundError(error.details())
-
-        if code == grpc.StatusCode.INVALID_ARGUMENT:
-            return InvalidArgumentError(error.details())
-
-        if code == grpc.StatusCode.DEADLINE_EXCEEDED:
-            return TimeoutError(error.details())
-
-        if code == grpc.StatusCode.UNAVAILABLE:
-            return ServiceUnavailableError(error.details())
-
-        return InternalServerError(error.details())

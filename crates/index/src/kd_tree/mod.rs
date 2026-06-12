@@ -9,3 +9,5 @@ pub mod types;
 mod tests;
 
 pub const KD_TREE_MAGIC_BYTES: Magic = [0x00, 0x01, 0x02, 0x00];
+
+pub use index::{KDTree, KDTreeConfig};

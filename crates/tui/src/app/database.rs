@@ -1,6 +1,6 @@
 use api::{DbConfig, VectorDb, init_api};
 use defs::Similarity;
-use index::{IndexType, hnsw::HnswConfig};
+use index::{IndexType, hnsw::HnswConfig, kd_tree::KDTreeConfig};
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -50,6 +50,7 @@ impl DatabaseManager {
             dimension: 512,
             similarity: Similarity::Cosine,
             hnsw_config: HnswConfig::default(),
+            kd_tree_config: KDTreeConfig::default(),
         };
 
         match init_api(cfg) {
@@ -84,6 +85,7 @@ impl DatabaseManager {
             dimension: 512,
             similarity: Similarity::Cosine,
             hnsw_config: HnswConfig::default(),
+            kd_tree_config: KDTreeConfig::default(),
         };
 
         match init_api(cfg) {

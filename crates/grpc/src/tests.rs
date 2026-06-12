@@ -7,7 +7,7 @@ use crate::service::{VectorDBService, run_server};
 use crate::utils::ServerEndpoint;
 use api::DbConfig;
 use defs::Similarity;
-use index::{IndexType, hnsw::HnswConfig};
+use index::{IndexType, hnsw::HnswConfig, kd_tree::KDTreeConfig};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use storage::StorageType;
@@ -36,6 +36,7 @@ async fn start_test_server() -> Result<(SocketAddr, TempDir), Box<dyn std::error
         dimension: 3,
         similarity: Similarity::Cosine,
         hnsw_config: HnswConfig::default(),
+        kd_tree_config: KDTreeConfig::default(),
     };
 
     let vector_db_api = api::init_api(db_config)?;

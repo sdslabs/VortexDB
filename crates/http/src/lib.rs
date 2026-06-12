@@ -54,7 +54,7 @@ mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use defs::Similarity;
-    use index::{IndexType, hnsw::HnswConfig};
+    use index::{IndexType, hnsw::HnswConfig, kd_tree::KDTreeConfig};
     use serde_json::json;
     use storage::StorageType;
 
@@ -68,6 +68,7 @@ mod tests {
             dimension: 3,
             similarity: Similarity::Cosine,
             hnsw_config: HnswConfig::default(),
+            kd_tree_config: KDTreeConfig::default(),
         })
         .unwrap();
         let server = TestServer::new(create_router(Arc::new(db))).unwrap();

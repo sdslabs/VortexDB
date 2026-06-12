@@ -1,7 +1,7 @@
 use defs::{DbError, Dimension, IndexedVector, SearchQueryInput, Similarity, SnapshottableDb};
 use defs::{DenseVector, Payload, Point, PointId, PointInput};
 use index::hnsw::{HnswConfig, HnswIndex};
-use index::kd_tree::index::KDTree;
+use index::kd_tree::{KDTree, KDTreeConfig};
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 // use std::sync::atomic::{AtomicU64, Ordering};
@@ -226,6 +226,7 @@ pub struct DbConfig {
     pub dimension: Dimension,
     pub similarity: Similarity,
     pub hnsw_config: HnswConfig,
+    pub kd_tree_config: KDTreeConfig,
 }
 
 #[derive(Debug)]
@@ -257,7 +258,10 @@ pub fn init_api(config: DbConfig) -> Result<VectorDb> {
     // Initialize the vector index
     let index: Arc<RwLock<dyn VectorIndex>> = match config.index_type {
         IndexType::Flat => Arc::new(RwLock::new(FlatIndex::new())),
-        IndexType::KDTree => Arc::new(RwLock::new(KDTree::build_empty(config.dimension))),
+        IndexType::KDTree => Arc::new(RwLock::new(KDTree::build_empty_with_config(
+            config.dimension,
+            config.kd_tree_config,
+        ))),
         IndexType::HNSW => Arc::new(RwLock::new(HnswIndex::with_config(
             config.similarity,
             config.dimension,
@@ -300,6 +304,7 @@ mod tests {
             dimension: 3,
             similarity: Similarity::Cosine,
             hnsw_config: HnswConfig::default(),
+            kd_tree_config: KDTreeConfig::default(),
         };
         (init_api(config).unwrap(), temp_dir)
     }

@@ -54,6 +54,34 @@ def test_insert_rejects_invalid_vector(client):
         )
 
 
+def test_insert_batch_success(client, mock_connection):
+    mock_connection.call.return_value = Mock(
+        ids=[
+            Mock(id=Mock(value="p1")),
+            Mock(id=Mock(value="p2")),
+        ]
+    )
+
+    point_ids = client.insert_batch(
+        points=[
+            (DenseVector([1, 2, 3]), Payload.text("hello")),
+            (DenseVector([4, 5, 6]), Payload.text("world")),
+        ]
+    )
+
+    assert point_ids == ["p1", "p2"]
+
+
+def test_insert_batch_rejects_invalid_vector(client):
+    with pytest.raises(TypeError):
+        client.insert_batch(
+            points=[
+                (DenseVector([1, 2, 3]), Payload.text("hello")),
+                ([4, 5, 6], Payload.text("world")),
+            ]
+        )
+
+
 # Get
 
 def test_get_point_success(client, mock_connection):
@@ -115,6 +143,43 @@ def test_search_invalid_vector(client):
             vector=[1, 2, 3],
             similarity=Similarity.COSINE,
             limit=2,
+        )
+
+
+def test_search_batch_success(client, mock_connection):
+    mock_connection.call.return_value = Mock(
+        results=[
+            Mock(
+                result_point_ids=[
+                    Mock(id=Mock(value="p1")),
+                    Mock(id=Mock(value="p2")),
+                ]
+            ),
+            Mock(
+                result_point_ids=[
+                    Mock(id=Mock(value="p3")),
+                ]
+            ),
+        ]
+    )
+
+    results = client.search_batch(
+        queries=[
+            (DenseVector([1, 2, 3]), Similarity.COSINE, 2),
+            (DenseVector([4, 5, 6]), Similarity.COSINE, 1),
+        ]
+    )
+
+    assert results == [["p1", "p2"], ["p3"]]
+
+
+def test_search_batch_rejects_invalid_vector(client):
+    with pytest.raises(TypeError):
+        client.search_batch(
+            queries=[
+                (DenseVector([1, 2, 3]), Similarity.COSINE, 2),
+                ([4, 5, 6], Similarity.COSINE, 1),
+            ]
         )
 
 

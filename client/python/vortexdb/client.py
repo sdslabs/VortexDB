@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Sequence
 
 from vortexdb.connection import GRPCConnection
 from vortexdb.config import VortexDBConfig
@@ -38,11 +38,7 @@ class VortexDB:
         Insert a vector with payload.
         Returns: point_id (str)
         """
-        if not isinstance(vector, DenseVector):
-            raise TypeError(
-                "vector must be a DenseVector. "
-                "Use: DenseVector([1.0, 2.0, 3.0])"
-            )
+        self._validate_dense_vector(vector)
 
         request = proto.build_insert_request(
             vector=vector,
@@ -55,6 +51,29 @@ class VortexDB:
         )
 
         return response.id.value
+
+    def insert_batch(
+        self,
+        *,
+        points: Sequence[tuple[DenseVector, Payload]],
+    ) -> List[str]:
+        """
+        Insert multiple vectors with payloads.
+        Returns: List of point IDs
+        """
+        for vector, _ in points:
+            self._validate_dense_vector(vector)
+
+        request = proto.build_batch_insert_request(
+            points=list(points),
+        )
+
+        response = self._conn.call(
+            self._conn.stub.InsertVectorsBatch,
+            request,
+        )
+
+        return [pid.id.value for pid in response.ids]
 
     def get(self, *, point_id: str) -> Point | None:
         """
@@ -95,11 +114,7 @@ class VortexDB:
         Search for nearest neighbors.
         Returns: List of point IDs
         """
-        if not isinstance(vector, DenseVector):
-            raise TypeError(
-                "vector must be a DenseVector. "
-                "Use: DenseVector([1.0, 2.0, 3.0])"
-            )
+        self._validate_dense_vector(vector)
 
         request = proto.build_search_request(
             vector=vector,
@@ -113,6 +128,40 @@ class VortexDB:
         )
 
         return [pid.id.value for pid in response.result_point_ids]
+
+    def search_batch(
+        self,
+        *,
+        queries: Sequence[tuple[DenseVector, Similarity, int]],
+    ) -> List[List[str]]:
+        """
+        Search nearest neighbors for multiple query vectors.
+        Returns: List of result point ID lists
+        """
+        for vector, _, _ in queries:
+            self._validate_dense_vector(vector)
+
+        request = proto.build_batch_search_request(
+            queries=list(queries),
+        )
+
+        response = self._conn.call(
+            self._conn.stub.SearchPointsBatch,
+            request,
+        )
+
+        return [
+            [pid.id.value for pid in result.result_point_ids]
+            for result in response.results
+        ]
+
+    @staticmethod
+    def _validate_dense_vector(vector: DenseVector) -> None:
+        if not isinstance(vector, DenseVector):
+            raise TypeError(
+                "vector must be a DenseVector. "
+                "Use: DenseVector([1.0, 2.0, 3.0])"
+            )
 
     def close(self) -> None:
         """

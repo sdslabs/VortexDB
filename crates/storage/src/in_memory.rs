@@ -126,21 +126,25 @@ impl StorageEngine for MemoryStorage {
                 source,
             }
         })?;
+        let point_snapshot: Vec<Point> = {
+            let points = self
+                .points
+                .read()
+                .map_err(|_| StorageError::InMemoryLock {})?;
+            points.values().cloned().collect()
+        };
+
         let mut writer = BufWriter::new(file);
-        let points = self
-            .points
-            .read()
-            .map_err(|_| StorageError::InMemoryLock {})?;
         writer
             .write_all(INMEMORY_CHECKPOINT_MAGIC)
             .and_then(|_| writer.write_all(&INMEMORY_CHECKPOINT_VERSION.to_le_bytes()))
-            .and_then(|_| writer.write_all(&(points.len() as u64).to_le_bytes()))
+            .and_then(|_| writer.write_all(&(point_snapshot.len() as u64).to_le_bytes()))
             .map_err(|source| StorageError::InMemoryCheckpointIo {
                 msg: "Couldn't write in-memory checkpoint header".to_string(),
                 source,
             })?;
 
-        for point in points.values() {
+        for point in &point_snapshot {
             serialize_into(&mut writer, point).map_err(|source| StorageError::Serialization {
                 id: point.id,
                 source,

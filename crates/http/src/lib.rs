@@ -54,7 +54,7 @@ mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use defs::Similarity;
-    use index::IndexType;
+    use index::{IndexType, hnsw::HnswConfig};
     use serde_json::json;
     use storage::StorageType;
 
@@ -67,6 +67,7 @@ mod tests {
             data_path: temp_dir.path().to_path_buf(),
             dimension: 3,
             similarity: Similarity::Cosine,
+            hnsw_config: HnswConfig::default(),
         })
         .unwrap();
         let server = TestServer::new(create_router(Arc::new(db))).unwrap();

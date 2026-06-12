@@ -1,6 +1,6 @@
 use defs::{DbError, Dimension, IndexedVector, SearchQueryInput, Similarity, SnapshottableDb};
 use defs::{DenseVector, Payload, Point, PointId, PointInput};
-use index::hnsw::HnswIndex;
+use index::hnsw::{HnswConfig, HnswIndex};
 use index::kd_tree::index::KDTree;
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
@@ -225,6 +225,7 @@ pub struct DbConfig {
     pub data_path: PathBuf,
     pub dimension: Dimension,
     pub similarity: Similarity,
+    pub hnsw_config: HnswConfig,
 }
 
 #[derive(Debug)]
@@ -257,9 +258,10 @@ pub fn init_api(config: DbConfig) -> Result<VectorDb> {
     let index: Arc<RwLock<dyn VectorIndex>> = match config.index_type {
         IndexType::Flat => Arc::new(RwLock::new(FlatIndex::new())),
         IndexType::KDTree => Arc::new(RwLock::new(KDTree::build_empty(config.dimension))),
-        IndexType::HNSW => Arc::new(RwLock::new(HnswIndex::new(
+        IndexType::HNSW => Arc::new(RwLock::new(HnswIndex::with_config(
             config.similarity,
             config.dimension,
+            config.hnsw_config,
         ))),
     };
 
@@ -297,6 +299,7 @@ mod tests {
             data_path: temp_dir.path().to_path_buf(),
             dimension: 3,
             similarity: Similarity::Cosine,
+            hnsw_config: HnswConfig::default(),
         };
         (init_api(config).unwrap(), temp_dir)
     }

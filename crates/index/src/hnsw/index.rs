@@ -9,6 +9,28 @@ use crate::{IndexError, Result, distance};
 use super::types::{HnswStats, LevelGenerator, Node, PointIndexation};
 use std::cmp::{max, min};
 
+#[derive(Debug, Clone, Copy)]
+pub struct HnswConfig {
+    pub max_connections: usize,
+    pub max_connections_0: usize,
+    pub max_layer: usize,
+    pub ef_construction: usize,
+    pub ef: usize,
+}
+
+impl Default for HnswConfig {
+    fn default() -> Self {
+        let max_connections = 16;
+        Self {
+            max_connections,
+            max_connections_0: 2 * max_connections,
+            max_layer: 16,
+            ef_construction: 200,
+            ef: 100,
+        }
+    }
+}
+
 pub struct HnswIndex {
     // Construction/search parameters
     pub ef_construction: usize,
@@ -26,11 +48,19 @@ pub struct HnswIndex {
 
 impl HnswIndex {
     pub fn new(similarity: Similarity, data_dimension: Dimension) -> Self {
-        let max_connections = 16;
-        let max_connections_0 = 32; // M0 = 2 * M (common default)
-        let max_layer = 16;
-        let ef_construction = 200;
-        let ef = 100;
+        Self::with_config(similarity, data_dimension, HnswConfig::default())
+    }
+
+    pub fn with_config(
+        similarity: Similarity,
+        data_dimension: Dimension,
+        config: HnswConfig,
+    ) -> Self {
+        let max_connections = config.max_connections.max(2);
+        let max_connections_0 = config.max_connections_0.max(max_connections);
+        let max_layer = config.max_layer.max(1);
+        let ef_construction = config.ef_construction.max(1);
+        let ef = config.ef.max(1);
 
         let level_generator = LevelGenerator::from_m(max_connections);
         let index = PointIndexation {
@@ -86,8 +116,7 @@ impl VectorIndex for HnswIndex {
         let mut query_vec = vector.vector;
         self.normalize_if_cosine(&mut query_vec);
 
-        self.cache.insert(new_id, query_vec);
-        let query_vec = self.get_vec(new_id)?;
+        self.cache.insert(new_id, query_vec.clone());
 
         let mut rng = rand::rng();
         let l: u8 = self

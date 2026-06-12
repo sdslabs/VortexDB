@@ -4,7 +4,7 @@ use defs::{DenseVector, Dimension, IndexedVector, PointId, Similarity};
 use uuid::Uuid;
 
 use crate::VectorIndex;
-use crate::{IndexError, Result};
+use crate::{IndexError, Result, distance};
 
 use super::types::{HnswStats, LevelGenerator, Node, PointIndexation};
 use std::cmp::{max, min};
@@ -83,10 +83,11 @@ impl VectorIndex for HnswIndex {
 
         let new_id: PointId = vector.id;
 
-        let mut query_vec = vector.vector.clone();
+        let mut query_vec = vector.vector;
         self.normalize_if_cosine(&mut query_vec);
 
-        self.cache.insert(new_id, query_vec.clone());
+        self.cache.insert(new_id, query_vec);
+        let query_vec = self.get_vec(new_id)?;
 
         let mut rng = rand::rng();
         let l: u8 = self
@@ -291,6 +292,25 @@ impl HnswIndex {
                     *x /= norm;
                 }
             }
+        }
+    }
+
+    pub(super) fn distance(&self, a: &[f32], b: &[f32]) -> f32 {
+        debug_assert_eq!(a.len(), b.len());
+        match self.similarity {
+            Similarity::Euclidean => a
+                .iter()
+                .zip(b.iter())
+                .map(|(&x, &y)| {
+                    let d = x - y;
+                    d * d
+                })
+                .sum(),
+            Similarity::Cosine => {
+                let dot = a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum::<f32>();
+                1.0 - dot
+            }
+            Similarity::Manhattan | Similarity::Hamming => distance(a, b, self.similarity),
         }
     }
 }

@@ -27,14 +27,6 @@
               "concepts/indexers",
               "concepts/snapshots"
             ]
-          },
-          {
-            "group": "Guides",
-            "pages": [
-              "guides/docker-compose",
-              "guides/python-sdk",
-              "guides/tui-walkthrough"
-            ]
           }
         ]
       },

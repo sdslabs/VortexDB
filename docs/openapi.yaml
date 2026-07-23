@@ -5,7 +5,7 @@ info:
     RESTful API for VortexDB - a high-performance vector database built in Rust.
 
     This API provides CRUD operations for vector points and similarity search.
-  version: 1.0.0
+  version: "1.0.0"
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0

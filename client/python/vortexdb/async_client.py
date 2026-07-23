@@ -1,20 +1,13 @@
 from typing import List
 
-from vortexdb.connection import GRPCConnection
-from vortexdb.config import VortexDBConfig
-from vortexdb.models import (
-    DenseVector,
-    Payload,
-    Point,
-    Similarity,
-    SearchQuery,
-)
-
 from vortexdb import protoutils as proto
+from vortexdb.async_connection import AsyncGRPCConnection
+from vortexdb.config import VortexDBConfig
+from vortexdb.models import DenseVector, Payload, Point, Similarity, SearchQuery
 
 
-class VortexDB:
-    """High-level Python client for VortexDB"""
+class AsyncVortexDB:
+    """High-level async Python client for VortexDB."""
 
     def __init__(
         self,
@@ -30,49 +23,53 @@ class VortexDB:
             timeout=timeout,
         )
 
-        self._conn = GRPCConnection(self._config)
+        self._conn = AsyncGRPCConnection(self._config)
 
-    # The basic operations
-
-    def insert(self, *, vector: DenseVector, payload: Payload) -> str:
+    async def insert(self, *, vector: DenseVector, payload: Payload) -> str:
         """
         Insert a vector with payload.
         Returns: point_id (str)
         """
-        self._validate_dense_vector(vector)
+        if not isinstance(vector, DenseVector):
+            raise TypeError(
+                "vector must be a DenseVector. Use: DenseVector([1.0, 2.0, 3.0])"
+            )
 
         request = proto.build_insert_request(
             vector=vector,
             payload=payload,
         )
 
-        response = self._conn.call(
+        response = await self._conn.call(
             self._conn.stub.InsertVector,
             request,
         )
 
         return response.id.value
 
-    def batch_insert(self, *, items: list[tuple[DenseVector, Payload]]) -> list[str]:
+    async def batch_insert(
+        self, *, items: list[tuple[DenseVector, Payload]]
+    ) -> list[str]:
         """
         Insert multiple vectors.
         Returns: list of point_id (str)
         """
         request = proto.build_batch_insert_request(items=items)
 
-        response = self._conn.call(
+        response = await self._conn.call(
             self._conn.stub.InsertVectorsBatch,
             request,
         )
+
         return [pid.id.value for pid in response.ids]
 
-    def get(self, *, point_id: str) -> Point | None:
+    async def get(self, *, point_id: str) -> Point | None:
         """
         Retrieve a point by ID.
         """
         request = proto.build_point_id_request(point_id)
 
-        response = self._conn.call(
+        response = await self._conn.call(
             self._conn.stub.GetPoint,
             request,
         )
@@ -82,18 +79,18 @@ class VortexDB:
 
         return Point.from_proto(response)
 
-    def delete(self, *, point_id: str) -> None:
+    async def delete(self, *, point_id: str) -> None:
         """
         Delete a point by ID.
         """
         request = proto.build_point_id_request(point_id)
 
-        self._conn.call(
+        await self._conn.call(
             self._conn.stub.DeletePoint,
             request,
         )
 
-    def search(
+    async def search(
         self,
         *,
         vector: DenseVector | None = None,
@@ -113,7 +110,10 @@ class VortexDB:
             similarity = query.similarity
             limit = query.limit
         else:
-            self._validate_dense_vector(vector)
+            if not isinstance(vector, DenseVector):
+                raise TypeError(
+                    "vector must be a DenseVector. Use: DenseVector([1.0, 2.0, 3.0])"
+                )
             if not isinstance(similarity, Similarity):
                 raise TypeError("similarity must be a Similarity enum")
             if not isinstance(limit, int):
@@ -125,13 +125,15 @@ class VortexDB:
             limit=limit,
             ef=ef,
         )
-        response = self._conn.call(
+
+        response = await self._conn.call(
             self._conn.stub.SearchPoints,
             request,
         )
+
         return [pid.id.value for pid in response.result_point_ids]
 
-    def batch_search(
+    async def batch_search(
         self,
         *,
         queries,
@@ -190,29 +192,20 @@ class VortexDB:
             raise TypeError(f"Invalid query format at index {i}")
 
         request = proto.build_batch_search_request(queries=normalized, ef=ef)
-        response = self._conn.call(self._conn.stub.SearchPointsBatch, request)
+        response = await self._conn.call(self._conn.stub.SearchPointsBatch, request)
         return [
             [pid.id.value for pid in result.result_point_ids]
             for result in response.results
         ]
 
-    @staticmethod
-    def _validate_dense_vector(vector: DenseVector) -> None:
-        if not isinstance(vector, DenseVector):
-            raise TypeError(
-                "vector must be a DenseVector. Use: DenseVector([1.0, 2.0, 3.0])"
-            )
-
-    def close(self) -> None:
+    async def close(self) -> None:
         """
-        Close the gRPC connection.
+        Close the async gRPC connection.
         """
-        self._conn.close()
+        await self._conn.close()
 
-    # Context Manager
-    # Will allow the usage of VortexDB with the 'with' keyword (Example given in examples/context_manager_usage.py)
-    def __enter__(self) -> "VortexDB":
+    async def __aenter__(self) -> "AsyncVortexDB":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
-        self.close()
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        await self.close()

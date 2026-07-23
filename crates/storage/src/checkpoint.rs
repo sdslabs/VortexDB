@@ -35,6 +35,7 @@ impl StorageCheckpoint {
             .0;
 
         let storage_type = match marker {
+            INMEMORY_CHECKPOINT_FILENAME_MARKER => StorageType::InMemory,
             ROCKSDB_CHECKPOINT_FILENAME_MARKER => StorageType::RocksDb,
             _ => {
                 return Err(DbError::StorageCheckpointError(

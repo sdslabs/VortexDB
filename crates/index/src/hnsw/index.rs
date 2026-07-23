@@ -4,10 +4,32 @@ use defs::{DenseVector, Dimension, IndexedVector, PointId, Similarity};
 use uuid::Uuid;
 
 use crate::VectorIndex;
-use crate::{IndexError, Result};
+use crate::{IndexError, Result, distance};
 
 use super::types::{HnswStats, LevelGenerator, Node, PointIndexation};
 use std::cmp::{max, min};
+
+#[derive(Debug, Clone, Copy)]
+pub struct HnswConfig {
+    pub max_connections: usize,
+    pub max_connections_0: usize,
+    pub max_layer: usize,
+    pub ef_construction: usize,
+    pub ef: usize,
+}
+
+impl Default for HnswConfig {
+    fn default() -> Self {
+        let max_connections = 16;
+        Self {
+            max_connections,
+            max_connections_0: 2 * max_connections,
+            max_layer: 16,
+            ef_construction: 200,
+            ef: 100,
+        }
+    }
+}
 
 pub struct HnswIndex {
     // Construction/search parameters
@@ -26,11 +48,19 @@ pub struct HnswIndex {
 
 impl HnswIndex {
     pub fn new(similarity: Similarity, data_dimension: Dimension) -> Self {
-        let max_connections = 16;
-        let max_connections_0 = 32; // M0 = 2 * M (common default)
-        let max_layer = 16;
-        let ef_construction = 200;
-        let ef = 100;
+        Self::with_config(similarity, data_dimension, HnswConfig::default())
+    }
+
+    pub fn with_config(
+        similarity: Similarity,
+        data_dimension: Dimension,
+        config: HnswConfig,
+    ) -> Self {
+        let max_connections = config.max_connections.max(2);
+        let max_connections_0 = config.max_connections_0.max(max_connections);
+        let max_layer = config.max_layer.max(1);
+        let ef_construction = config.ef_construction.max(1);
+        let ef = config.ef.max(1);
 
         let level_generator = LevelGenerator::from_m(max_connections);
         let index = PointIndexation {
@@ -83,7 +113,7 @@ impl VectorIndex for HnswIndex {
 
         let new_id: PointId = vector.id;
 
-        let mut query_vec = vector.vector.clone();
+        let mut query_vec = vector.vector;
         self.normalize_if_cosine(&mut query_vec);
 
         self.cache.insert(new_id, query_vec.clone());
@@ -173,11 +203,16 @@ impl VectorIndex for HnswIndex {
     /// - greedy descend from the top layer to level 1
     /// - run ef-best-first at level 0 with ef0 = max(ef, k)
     /// - return up to k ids by ascending distance
-    fn search(
+    fn search(&self, query: DenseVector, similarity: Similarity, k: usize) -> Result<Vec<PointId>> {
+        self.search_with_ef(query, similarity, k, None)
+    }
+
+    fn search_with_ef(
         &self,
         mut query: DenseVector,
         _similarity: Similarity,
         k: usize,
+        ef: Option<usize>,
     ) -> Result<Vec<PointId>> {
         if k == 0 {
             return Ok(Vec::new());
@@ -209,7 +244,7 @@ impl VectorIndex for HnswIndex {
                 ep = self.greedy_search_layer(ep, level, &query)?;
             }
         }
-        let ef0 = max(self.ef, k);
+        let ef0 = max(ef.unwrap_or(self.ef), k);
         let mut w = self.search_layer_for_insert(ep, 0, &query, ef0)?;
         w.truncate(k);
         let result: Vec<Uuid> = w.into_iter().map(|(id, _)| id).collect();
@@ -291,6 +326,25 @@ impl HnswIndex {
                     *x /= norm;
                 }
             }
+        }
+    }
+
+    pub(super) fn distance(&self, a: &[f32], b: &[f32]) -> f32 {
+        debug_assert_eq!(a.len(), b.len());
+        match self.similarity {
+            Similarity::Euclidean => a
+                .iter()
+                .zip(b.iter())
+                .map(|(&x, &y)| {
+                    let d = x - y;
+                    d * d
+                })
+                .sum(),
+            Similarity::Cosine => {
+                let dot = a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum::<f32>();
+                1.0 - dot
+            }
+            Similarity::Manhattan | Similarity::Hamming => distance(a, b, self.similarity),
         }
     }
 }

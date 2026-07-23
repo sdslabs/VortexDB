@@ -2,6 +2,7 @@ import grpc
 import pytest
 from unittest.mock import Mock, patch
 
+from vortexdb._grpc_common import map_grpc_error
 from vortexdb.connection import GRPCConnection
 from vortexdb.config import VortexDBConfig
 from vortexdb.exceptions import (
@@ -14,6 +15,7 @@ from vortexdb.exceptions import (
 )
 
 # Fake gRPC error, required for testing
+
 
 class FakeRpcError(grpc.RpcError):
     """
@@ -34,6 +36,7 @@ class FakeRpcError(grpc.RpcError):
 
 # Pytest fixtures for config and channel
 
+
 @pytest.fixture
 def config():
     return VortexDBConfig(
@@ -51,6 +54,7 @@ def connection(config):
 
 
 # Basic connection testing
+
 
 def test_channel_created_with_correct_url(config):
     with patch("grpc.insecure_channel") as mock_channel:
@@ -77,6 +81,7 @@ def test_successful_rpc_call(connection):
 
 # Error mapping test
 
+
 @pytest.mark.parametrize(
     "status_code,expected_exception",
     [
@@ -89,21 +94,21 @@ def test_successful_rpc_call(connection):
 )
 def test_grpc_error_mapping(status_code, expected_exception, connection):
     error = FakeRpcError(status_code, "boom")
-    fake_rpc = Mock(side_effect=error)
 
-    with pytest.raises(expected_exception):
-        connection.call(fake_rpc, request="req")
+    mapped = map_grpc_error(error)
+
+    assert isinstance(mapped, expected_exception)
 
 
 def test_unknown_grpc_error_maps_to_internal_error(connection):
     error = FakeRpcError(grpc.StatusCode.UNKNOWN, "unknown")
-    fake_rpc = Mock(side_effect=error)
+    mapped = map_grpc_error(error)
 
-    with pytest.raises(InternalServerError):
-        connection.call(fake_rpc, request="req")
+    assert isinstance(mapped, InternalServerError)
 
 
 # Clean connection closure test
+
 
 def test_close_closes_channel(config):
     with patch("grpc.insecure_channel") as mock_channel:

@@ -12,6 +12,7 @@ from vortexdb.grpc import vector_db_pb2
 
 # DenseVector Tests
 
+
 def test_dense_vector_valid():
     a = [1, 2.5, 3]
     v = DenseVector(a)
@@ -47,6 +48,7 @@ def test_dense_vector_to_proto():
 
 # Similarity Test
 
+
 def test_similarity_to_proto():
     assert Similarity.EUCLIDEAN.to_proto() == vector_db_pb2.Euclidean
     assert Similarity.MANHATTAN.to_proto() == vector_db_pb2.Manhattan
@@ -55,6 +57,7 @@ def test_similarity_to_proto():
 
 
 # ContentType Tests
+
 
 def test_content_type_to_proto():
     assert ContentType.TEXT.to_proto() == vector_db_pb2.Text
@@ -72,6 +75,7 @@ def test_content_type_from_proto_invalid():
 
 
 # Payload Tests
+
 
 def test_payload_text_factory():
     p = Payload.text("hello")
@@ -91,24 +95,20 @@ def test_payload_to_proto():
     assert proto.content == "hello"
     assert proto.content_type == vector_db_pb2.Text
 
+
 def test_payload_rejects_invalid_content_type():
     with pytest.raises(TypeError):
         Payload("text", "hello")
 
 
-
 # Point Test
+
 
 def test_point_from_proto():
     proto = vector_db_pb2.Point(
-        id=vector_db_pb2.PointID(
-            id=vector_db_pb2.UUID(value="point-123")
-        ),
+        id=vector_db_pb2.PointID(id=vector_db_pb2.UUID(value="point-123")),
         vector=vector_db_pb2.DenseVector(values=[1, 2, 3]),
-        payload=vector_db_pb2.Payload(
-            content_type=vector_db_pb2.Text,
-            content="hello"
-        )
+        payload=vector_db_pb2.Payload(content_type=vector_db_pb2.Text, content="hello"),
     )
 
     point = Point.from_proto(proto)
@@ -118,12 +118,11 @@ def test_point_from_proto():
     assert point.payload.content_type == ContentType.TEXT
     assert point.payload.content == "hello"
 
+
 def test_point_from_proto_without_payload():
     proto = vector_db_pb2.Point(
-        id=vector_db_pb2.PointID(
-            id=vector_db_pb2.UUID(value="p1")
-        ),
-        vector=vector_db_pb2.DenseVector(values=[1,2,3]),
+        id=vector_db_pb2.PointID(id=vector_db_pb2.UUID(value="p1")),
+        vector=vector_db_pb2.DenseVector(values=[1, 2, 3]),
         payload=None,
     )
 

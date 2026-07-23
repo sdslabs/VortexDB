@@ -9,6 +9,21 @@ use std::{
 };
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Copy)]
+pub struct KDTreeConfig {
+    pub balance_threshold: f32,
+    pub delete_rebuild_ratio: f32,
+}
+
+impl Default for KDTreeConfig {
+    fn default() -> Self {
+        Self {
+            balance_threshold: 0.7,
+            delete_rebuild_ratio: 0.25,
+        }
+    }
+}
+
 pub struct KDTree {
     pub dim: usize,
     pub root: Option<Box<KDTreeNode>>,
@@ -17,22 +32,35 @@ pub struct KDTree {
     // Rebuild tracking
     pub total_nodes: usize,
     pub deleted_count: usize,
+    pub config: KDTreeConfig,
 }
 
 impl KDTree {
     // Build an empty index with no points
     pub fn build_empty(dim: usize) -> Self {
+        Self::build_empty_with_config(dim, KDTreeConfig::default())
+    }
+
+    pub fn build_empty_with_config(dim: usize, config: KDTreeConfig) -> Self {
         KDTree {
             dim,
             root: None,
             point_ids: HashSet::new(),
             total_nodes: 0,
             deleted_count: 0,
+            config: Self::sanitize_config(config),
         }
     }
 
     // Builds the vector index from provided vectors, there should atleast be single vector for dim calculation
-    pub fn build(mut vectors: Vec<IndexedVector>) -> Result<Self> {
+    pub fn build(vectors: Vec<IndexedVector>) -> Result<Self> {
+        Self::build_with_config(vectors, KDTreeConfig::default())
+    }
+
+    pub fn build_with_config(
+        mut vectors: Vec<IndexedVector>,
+        config: KDTreeConfig,
+    ) -> Result<Self> {
         if vectors.is_empty() {
             Err(IndexError::NotInitialized)
         } else {
@@ -50,7 +78,15 @@ impl KDTree {
                 point_ids,
                 total_nodes: vectors.len(),
                 deleted_count: 0,
+                config: Self::sanitize_config(config),
             })
+        }
+    }
+
+    fn sanitize_config(config: KDTreeConfig) -> KDTreeConfig {
+        KDTreeConfig {
+            balance_threshold: config.balance_threshold.clamp(0.5, 1.0),
+            delete_rebuild_ratio: config.delete_rebuild_ratio.clamp(0.0, 1.0),
         }
     }
 
@@ -246,7 +282,7 @@ impl KDTree {
 
         // Check root first (depth 0)
         if let Some(node) = current
-            && Self::is_unbalanced(node)
+            && self.is_unbalanced(node)
         {
             unbalanced_depth = Some(0);
         }
@@ -267,7 +303,7 @@ impl KDTree {
 
                 // Check the child node we just moved to (at depth idx + 1)
                 if let Some(child) = current
-                    && Self::is_unbalanced(child)
+                    && self.is_unbalanced(child)
                 {
                     unbalanced_depth = Some(idx + 1);
                     break;
@@ -289,7 +325,7 @@ impl KDTree {
                 self.point_ids.remove(point_id);
             }
 
-            if Self::should_rebuild_global(self.total_nodes, self.deleted_count)
+            if self.should_rebuild_global()
                 && let Some(root) = self.root.take()
             {
                 let mut vectors = Self::collect_active_vectors(*root);

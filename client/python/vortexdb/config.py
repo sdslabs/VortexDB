@@ -5,6 +5,8 @@ from vortexdb.exceptions import ConfigurationError
 DEFAULT_GRPC_HOST = "localhost"
 DEFAULT_GRPC_PORT = 50051
 DEFAULT_TIMEOUT = 5.0
+
+
 @dataclass(frozen=True)
 class VortexDBConfig:
     """Configuration for the VortexDB Python client"""
@@ -20,7 +22,7 @@ class VortexDBConfig:
         api_key: str | None = None,
         timeout: float | None = None,
     ) -> "VortexDBConfig":
-        """ Load configuration from explicit arguments with environment variable fallback """
+        """Load configuration from explicit arguments with environment variable fallback"""
 
         resolved_grpc_url = (
             grpc_url

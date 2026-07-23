@@ -24,13 +24,13 @@ classifiers = [
 ]
 
 dependencies = [
-    "grpcio>=1.60",
-    "protobuf>=4.25",
+    "grpcio>=1.81.1",
+    "protobuf>=6.33.5,<7.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "grpcio-tools>=1.60",
+    "grpcio-tools>=1.81.1,<2.0.0",
     "pytest>=7.0",
 ]
 
@@ -42,3 +42,6 @@ Repository = "https://github.com/sdslabs/VortexDB"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+exclude = ["vortexdb/grpc"]

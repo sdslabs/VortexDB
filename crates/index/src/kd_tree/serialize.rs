@@ -101,6 +101,7 @@ impl KDTree {
             point_ids: non_deleted,
             total_nodes: metadata.total_nodes,
             deleted_count: metadata.deleted_count,
+            config: Default::default(),
         })
     }
 }

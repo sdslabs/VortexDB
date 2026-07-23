@@ -24,16 +24,32 @@ pub enum DbError {
     PointNotFound { id: PointId },
 }
 
-#[derive(Debug)]
+use axum::{http::StatusCode, response::IntoResponse};
+use snafu::Snafu;
+
+#[derive(Debug, Snafu)]
 pub enum ServerError {
-    Bind(io::Error),
-    Serve(io::Error),
+    #[snafu(display("Failed to bind: {source}"))]
+    Bind { source: io::Error },
+
+    #[snafu(display("Failed to serve: {source}"))]
+    Serve { source: io::Error },
 }
 
 #[derive(Debug)]
 pub enum AppError {
     ServerError(ServerError),
+    Api(String),
 }
 
+impl IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        let (status, message) = match self {
+            AppError::Api(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::ServerError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        };
+        (status, message).into_response()
+    }
+}
 // Error type for server
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;

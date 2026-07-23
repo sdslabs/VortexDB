@@ -21,6 +21,23 @@ pub trait VectorIndex: Send + Sync + SerializableIndex {
         similarity: Similarity,
         k: usize,
     ) -> Result<Vec<PointId>>; // Return a Vec of ids of closest vectors (length max k)
+
+    fn search_with_ef(
+        &self,
+        query_vector: DenseVector,
+        similarity: Similarity,
+        k: usize,
+        _ef: Option<usize>,
+    ) -> Result<Vec<PointId>> {
+        self.search(query_vector, similarity, k)
+    }
+
+    fn insert_batch(&mut self, vectors: Vec<IndexedVector>) -> Result<()> {
+        for v in vectors {
+            self.insert(v)?;
+        }
+        Ok(())
+    }
 }
 
 /// Distance function to get the distance between two vectors (taken from old version)

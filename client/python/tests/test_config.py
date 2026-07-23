@@ -16,6 +16,7 @@ def clean_env(monkeypatch):
 
 # Checking from_env
 
+
 def test_config_requires_api_key(clean_env):
     with pytest.raises(ConfigurationError):
         VortexDBConfig.from_env()
@@ -32,7 +33,9 @@ def test_config_from_explicit_args(clean_env):
     assert cfg.api_key == "secret"
     assert cfg.timeout == 10.0
 
+
 # Env vars fallback
+
 
 def test_config_from_env_vars(clean_env, monkeypatch):
     monkeypatch.setenv("VORTEXDB_GRPC_URL", "127.0.0.1:1234")
@@ -47,6 +50,7 @@ def test_config_from_env_vars(clean_env, monkeypatch):
 
 
 # Defaults
+
 
 def test_config_default_grpc_url(clean_env, monkeypatch):
     monkeypatch.setenv("VORTEXDB_API_KEY", "secret")
@@ -65,6 +69,7 @@ def test_config_default_timeout(clean_env, monkeypatch):
 
 
 # Invalid Timeout
+
 
 def test_config_invalid_timeout(clean_env, monkeypatch):
     monkeypatch.setenv("VORTEXDB_API_KEY", "secret")

@@ -1,5 +1,6 @@
 from vortexdb import VortexDB
-from vortexdb import DenseVector, Payload, Similarity   # from vortexdb.models
+from vortexdb import DenseVector, Payload, Similarity  # from vortexdb.models
+
 
 def main():
     # Initialize client
@@ -31,6 +32,7 @@ def main():
 
     # Close connection
     db.close()
+
 
 if __name__ == "__main__":
     main()

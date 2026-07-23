@@ -181,13 +181,15 @@ impl StorageEngine for RocksDbStorage {
             let point: Point =
                 deserialize(&v).context(error::DeserializationSnafu { id: offset })?;
 
-            if point.id <= offset {
+            let id = point.id;
+
+            if id <= offset {
                 continue;
             }
 
             if let Some(vec) = point.vector {
-                last_id = point.id;
-                result.push((point.id, vec));
+                last_id = id;
+                result.push((id, vec));
                 if result.len() == limit {
                     break;
                 }

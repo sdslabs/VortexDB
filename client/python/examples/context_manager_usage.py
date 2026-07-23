@@ -1,11 +1,11 @@
 from vortexdb import VortexDB, DenseVector, Payload, Similarity
 
+
 def main():
     with VortexDB(
         grpc_url="localhost:50051",
         api_key="my-secret-password",
     ) as db:
-
         # Insert a vector
         point_id = db.insert(
             vector=DenseVector([0.1, 0.2, 0.3]),
@@ -29,6 +29,7 @@ def main():
 
     # At this point, the gRPC channel is closed automatically
     print("Connection closed")
+
 
 if __name__ == "__main__":
     main()

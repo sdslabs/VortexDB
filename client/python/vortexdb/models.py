@@ -4,10 +4,11 @@ from typing import List
 from vortexdb.grpc import vector_db_pb2
 
 
-# I found this to be a good idea, because 
+# I found this to be a good idea, because
 # 1. readability
 # 2. will help in HTTP client
 # 3. transport conversion at the very end, won't break if proto enum changes
+
 
 class Similarity(Enum):
     EUCLIDEAN = "euclidean"
@@ -57,20 +58,21 @@ class DenseVector:
 
         for v in self.values:
             if not isinstance(v, (int, float)):
-                raise TypeError(
-                    "DenseVector values must be numeric (int or float)"
-                )
+                raise TypeError("DenseVector values must be numeric (int or float)")
 
         # force float normalization
         object.__setattr__(self, "values", [float(v) for v in self.values])
-    
+
     def to_proto(self) -> vector_db_pb2.DenseVector:
         return vector_db_pb2.DenseVector(values=self.values)
-    
+
     def to_list(self) -> list[float]:
         return list(self.values)
 
 
+# & Helper Function for Batch of DenseVectors
+def to_dense_vectors(arr):
+    return [DenseVector(x) for x in arr]
 
 
 @dataclass(frozen=True)
@@ -89,7 +91,6 @@ class Payload:
     def __post_init__(self):
         if not isinstance(self.content_type, ContentType):
             raise TypeError("content_type must be ContentType enum")
-
 
     def to_proto(self) -> vector_db_pb2.Payload:
         return vector_db_pb2.Payload(
@@ -120,7 +121,7 @@ class Point:
             vector=DenseVector(list(proto.vector.values)),
             payload=payload_obj,
         )
-    
+
     def pretty(self) -> str:
         return (
             f"\nPoint:\n id = {self.id},\n"
@@ -128,4 +129,19 @@ class Point:
             f" vector = {self.vector},\n"
             f" payload_type = {self.payload.content_type.name},\n"
             f" payload = '{self.payload.content}'"
+        )
+
+
+# I added this because using tuples will get messy if we increase fields in a search query
+@dataclass(frozen=True)
+class SearchQuery:
+    vector: DenseVector
+    similarity: Similarity
+    limit: int
+
+    def to_proto(self) -> vector_db_pb2.SearchRequest:
+        return vector_db_pb2.SearchRequest(
+            query_vector=self.vector.to_proto(),
+            similarity=self.similarity.to_proto(),
+            limit=self.limit,
         )

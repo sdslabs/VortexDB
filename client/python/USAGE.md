@@ -39,6 +39,30 @@ The client supports usage as a context manager, which automatically closes the u
 Example available in:  
 ```examples/context_manager_usage.py```
 
+### Async Client Support
+
+For async applications, use `AsyncVortexDB`. It mirrors the synchronous client API and uses `grpc.aio` under the hood, including full support for `batch_insert` and `batch_search`.
+
+Examples available in:
+```examples/async_usage.py``` & ```examples/async_batch_usage.py```
+
+```python
+async with AsyncVortexDB(
+    grpc_url="localhost:50051",
+    api_key="your-api-key",
+) as db:
+    point_id = await db.insert(
+        vector=DenseVector([0.1, 0.2, 0.3]),
+        payload=Payload.text("hello async vortex"),
+    )
+```
+
+### Batch Insertion and Search Support  
+
+Both `VortexDB` and `AsyncVortexDB` support batch insertion and batch search queries.  
+Methods of usage and examples available in:  
+```examples/batch_insert_usage.py``` & ```examples/search_query_usage.py``` & ```examples/async_batch_usage.py```  
+
 ---
 
 ## Client API
@@ -46,6 +70,27 @@ Example available in:
 ### `VortexDB`
 
 Main client class for interacting with the VortexDB gRPC server.
+
+### `AsyncVortexDB`
+
+Async client class for I/O-heavy applications. It has the same constructor and method names as `VortexDB`, but methods are awaitable:
+
+```
+await db.insert(...)
+await db.batch_insert(...)
+await db.get(...)
+await db.search(...)
+await db.batch_search(...)
+await db.delete(...)
+await db.close()
+```
+
+It also supports async context manager usage:
+
+```
+async with AsyncVortexDB(...) as db:
+    ...
+```
 
 #### **Constructor**
 
@@ -74,6 +119,22 @@ Returns
 
 Raises
 - `TypeError` if `vector` is not a `DenseVector`
+- gRPC-mapped errors (see Error Handling)
+
+---
+
+#### **Batch Insert**
+
+Insert multiple vectors with payloads in a single request  
+```
+batch_insert(*, items: list[tuple[DenseVector, Payload]]) -> list[str]
+```
+
+Returns
+- List of `point_id` (UUID string)
+
+Raises
+- `TypeError` if input structure is invalid
 - gRPC-mapped errors (see Error Handling)
 
 ---
@@ -109,6 +170,32 @@ Returns
 Raises
 - `TypeError` if `vector` is not a `DenseVector`
 - `InvalidArgumentError` for invalid parameters
+
+---
+
+#### **Batch Search**
+
+Search for nearest neighbours for multiple queries in a single request
+```
+batch_search(
+    *,
+    queries,
+    similarity: Similarity | None = None,
+    limit: int | None = None,
+) -> list[list[str]]
+```
+
+Returns 
+- `TypeError` for invalid query formats
+- `ValueError` if required parameters are missing
+
+Supported Input Formats:  
+The `queries` parameter is flexible and supports multiple formats:
+- List of `SearchQuery` objects
+- List of `(DenseVector, Similarity, Limit)` tuples
+- List of `(DenseVector, Similarity)` tuples with a global `Limit`
+- List of `(DenseVector, Limit)` tuples with a global `Similarity`
+- List of `DenseVector` with global `Similarity` and `Limit`
 
 ---
 
@@ -174,6 +261,19 @@ All fields are directly accessible:
 - `point.id`
 - `point.vector`
 - `point.payload`  
+
+---
+
+### `SearchQuery`
+
+```
+SearchQuery(
+    vector: DenseVector,
+    similarity: Similarity,
+    limit: int,
+)
+```
+Structured representation of a search request  
 
 ---
 
@@ -274,4 +374,4 @@ python -m grpc_tools.protoc \
 
 After running this:  
 - `vector_db_pb2_grpc.py` and `vector_db_pb2.py` will be updated
-- No other client code should need changes 
+- No other client code should need changes

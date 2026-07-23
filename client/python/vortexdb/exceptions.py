@@ -25,6 +25,6 @@ class ServiceUnavailableError(VortexDBError):
 class InternalServerError(VortexDBError):
     """Internal error in the server"""
 
+
 class ConfigurationError(VortexDBError):
     """Invalid or missing client configuration."""
-

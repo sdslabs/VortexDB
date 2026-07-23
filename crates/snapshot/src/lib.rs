@@ -26,7 +26,8 @@ use std::{
     time::SystemTime,
 };
 use storage::{
-    StorageEngine, StorageType, checkpoint::StorageCheckpoint, rocks_db::RocksDbStorage,
+    StorageEngine, StorageType, checkpoint::StorageCheckpoint, in_memory::MemoryStorage,
+    rocks_db::RocksDbStorage,
 };
 use tar::Archive;
 use tempfile::tempdir;
@@ -201,17 +202,12 @@ impl Snapshot {
             ));
         }
 
-        // only rocksdb is supported for snapshots as of now
         let mut storage_engine: Box<dyn StorageEngine> = match manifest.storage_type {
+            StorageType::InMemory => Box::new(MemoryStorage::new()),
             StorageType::RocksDb => Box::new(
                 RocksDbStorage::new(storage_data_path)
                     .map_err(|e| DbError::StorageError(format!("Could not open storage: {e}")))?,
             ),
-            _ => {
-                return Err(DbError::SnapshotError(
-                    "Unsupported storage type".to_string(),
-                ));
-            }
         };
 
         let id = manifest.id;

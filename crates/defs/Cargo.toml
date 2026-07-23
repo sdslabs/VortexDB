@@ -7,5 +7,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+axum.workspace = true
 serde.workspace = true
+snafu.workspace = true
 uuid.workspace = true

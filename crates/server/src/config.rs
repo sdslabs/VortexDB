@@ -1,7 +1,7 @@
 use api::DbConfig;
 use defs::Similarity;
 use dotenv::dotenv;
-use index::IndexType;
+use index::{IndexType, hnsw::HnswConfig, kd_tree::KDTreeConfig};
 use snafu::prelude::*;
 use std::env;
 use std::fs;
@@ -12,6 +12,12 @@ use tracing::{Level, event};
 
 const DEFAULT_HTTP_PORT: &str = "3000";
 const DEFAULT_GRPC_PORT: &str = "50051";
+const DEFAULT_HNSW_M: usize = 16;
+const DEFAULT_HNSW_MAX_LAYER: usize = 16;
+const DEFAULT_HNSW_EF_CONSTRUCTION: usize = 200;
+const DEFAULT_HNSW_EF: usize = 100;
+const DEFAULT_KD_TREE_BALANCE_THRESHOLD: f32 = 0.7;
+const DEFAULT_KD_TREE_DELETE_REBUILD_RATIO: f32 = 0.25;
 
 #[derive(Debug)]
 pub struct ServerConfig {
@@ -197,12 +203,33 @@ impl ServerConfig {
             }
         };
 
+        let hnsw_m = load_usize_env("HNSW_M", DEFAULT_HNSW_M);
+        let hnsw_config = HnswConfig {
+            max_connections: hnsw_m,
+            max_connections_0: load_usize_env("HNSW_M0", 2 * hnsw_m),
+            max_layer: load_usize_env("HNSW_MAX_LAYER", DEFAULT_HNSW_MAX_LAYER),
+            ef_construction: load_usize_env("HNSW_EF_CONSTRUCTION", DEFAULT_HNSW_EF_CONSTRUCTION),
+            ef: load_usize_env("HNSW_EF", DEFAULT_HNSW_EF),
+        };
+        let kd_tree_config = KDTreeConfig {
+            balance_threshold: load_f32_env(
+                "KD_TREE_BALANCE_THRESHOLD",
+                DEFAULT_KD_TREE_BALANCE_THRESHOLD,
+            ),
+            delete_rebuild_ratio: load_f32_env(
+                "KD_TREE_DELETE_REBUILD_RATIO",
+                DEFAULT_KD_TREE_DELETE_REBUILD_RATIO,
+            ),
+        };
+
         let db_config = DbConfig {
             storage_type,
             index_type,
             data_path,
             dimension,
             similarity,
+            hnsw_config,
+            kd_tree_config,
         };
 
         Ok(ServerConfig {
@@ -213,5 +240,37 @@ impl ServerConfig {
             logging,
             disable_http,
         })
+    }
+}
+
+fn load_usize_env(name: &str, default: usize) -> usize {
+    match env::var(name) {
+        Ok(value) => value.parse().unwrap_or_else(|_| {
+            event!(
+                Level::WARN,
+                "{}='{}' is invalid, defaulting to {}",
+                name,
+                value,
+                default
+            );
+            default
+        }),
+        Err(_) => default,
+    }
+}
+
+fn load_f32_env(name: &str, default: f32) -> f32 {
+    match env::var(name) {
+        Ok(value) => value.parse().unwrap_or_else(|_| {
+            event!(
+                Level::WARN,
+                "{}='{}' is invalid, defaulting to {}",
+                name,
+                value,
+                default
+            );
+            default
+        }),
+        Err(_) => default,
     }
 }

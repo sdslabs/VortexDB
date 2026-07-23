@@ -21,16 +21,24 @@ pub enum StoredVector {
     Dense(DenseVector),
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub enum ContentType {
+    #[default]
     Text,
     Image,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Payload {
     pub content_type: ContentType,
     pub content: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct PointInput {
+    pub id: Option<PointId>,
+    pub vector: Option<DenseVector>,
+    pub payload: Option<Payload>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -53,6 +61,42 @@ pub enum Similarity {
     Manhattan,
     Hamming,
     Cosine,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchInsertRequest {
+    pub points: Vec<PointInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchInsertResponse {
+    pub inserted: usize,
+    pub ids: Vec<PointId>,
+}
+
+// For batch search
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchSearchRequest {
+    pub queries: Vec<SearchQueryInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchQueryInput {
+    pub vector: DenseVector,
+    pub similarity: Similarity,
+    pub limit: usize,
+    #[serde(default)]
+    pub ef: Option<usize>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SearchResponse {
+    pub results: Vec<PointId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchSearchResponse {
+    pub results: Vec<SearchResponse>,
 }
 
 // Struct which stores the distance between a vector and query vector and implements ordering traits

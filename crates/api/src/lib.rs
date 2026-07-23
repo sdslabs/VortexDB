@@ -1,7 +1,7 @@
-use defs::{DbError, Dimension, IndexedVector, Similarity, SnapshottableDb};
-use defs::{DenseVector, Payload, Point, PointId};
-use index::hnsw::HnswIndex;
-use index::kd_tree::index::KDTree;
+use defs::{DbError, Dimension, IndexedVector, SearchQueryInput, Similarity, SnapshottableDb};
+use defs::{DenseVector, Payload, Point, PointId, PointInput};
+use index::hnsw::{HnswConfig, HnswIndex};
+use index::kd_tree::{KDTree, KDTreeConfig};
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 // use std::sync::atomic::{AtomicU64, Ordering};
@@ -10,8 +10,7 @@ use std::sync::{Arc, RwLock};
 use index::flat::index::FlatIndex;
 use index::{IndexType, VectorIndex};
 use snapshot::Snapshot;
-use storage::rocks_db::RocksDbStorage;
-use storage::{StorageEngine, StorageType, VectorPage};
+use storage::{StorageEngine, StorageType, VectorPage, create_storage_engine};
 
 use uuid::Uuid;
 
@@ -70,6 +69,37 @@ impl VectorDb {
         Ok(point_id)
     }
 
+    pub fn insert_batch(&self, points: Vec<PointInput>) -> Result<Vec<PointId>> {
+        let mut ids = Vec::with_capacity(points.len());
+
+        for point in points {
+            let id = point.id.unwrap_or_else(Uuid::new_v4);
+            let vector = point.vector;
+            let payload = point.payload;
+
+            if let Some(ref v) = vector
+                && v.len() != self.dimension
+            {
+                return Err(ApiError::DimensionMismatch {
+                    expected: self.dimension,
+                    got: v.len(),
+                });
+            }
+
+            self.storage.insert_point(id, vector.clone(), payload)?;
+
+            if let Some(v) = vector {
+                let indexed = IndexedVector { id, vector: v };
+                let mut index = self.index.write().map_err(|_| ApiError::LockError)?;
+                index.insert(indexed)?;
+            }
+
+            ids.push(id);
+        }
+
+        Ok(ids)
+    }
+
     //TODO: Make this an atomic operation
     pub fn delete(&self, id: PointId) -> Result<bool> {
         // Remove from storage
@@ -95,22 +125,17 @@ impl VectorDb {
         }
     }
 
-    pub fn search(
-        &self,
-        query: DenseVector,
-        similarity: Similarity,
-        limit: usize,
-    ) -> Result<Vec<PointId>> {
+    pub fn search(&self, query: SearchQueryInput) -> Result<Vec<PointId>> {
         // Validate search limit
-        if limit == 0 {
-            return Err(ApiError::InvalidSearchLimit { limit });
+        if query.limit == 0 {
+            return Err(ApiError::InvalidSearchLimit { limit: query.limit });
         }
 
         // Validate query dimension
-        if query.len() != self.dimension {
+        if query.vector.len() != self.dimension {
             return Err(ApiError::DimensionMismatch {
                 expected: self.dimension,
-                got: query.len(),
+                got: query.vector.len(),
             });
         }
 
@@ -118,9 +143,23 @@ impl VectorDb {
         let index = self.index.read().map_err(|_| ApiError::LockError)?;
 
         //TODO: Add feat of returning similarity scores in the search
-        let vectors = index.search(query, similarity, limit)?;
+        let vectors =
+            index.search_with_ef(query.vector, query.similarity, query.limit, query.ef)?;
 
         Ok(vectors)
+    }
+
+    pub fn search_batch(&self, queries: Vec<SearchQueryInput>) -> Result<Vec<Vec<PointId>>> {
+        let mut results = Vec::with_capacity(queries.len());
+        let index = self.index.read().unwrap();
+
+        for query in queries {
+            let found =
+                index.search_with_ef(query.vector, query.similarity, query.limit, query.ef)?;
+            results.push(found);
+        }
+
+        Ok(results)
     }
 
     pub fn list(&self, offset: PointId, limit: usize) -> Result<Option<VectorPage>> {
@@ -188,6 +227,8 @@ pub struct DbConfig {
     pub data_path: PathBuf,
     pub dimension: Dimension,
     pub similarity: Similarity,
+    pub hnsw_config: HnswConfig,
+    pub kd_tree_config: KDTreeConfig,
 }
 
 #[derive(Debug)]
@@ -214,18 +255,19 @@ pub fn restore_from_snapshot(config: &DbRestoreConfig) -> Result<VectorDb, DbErr
 
 pub fn init_api(config: DbConfig) -> Result<VectorDb> {
     // Initialize the storage engine
-    let storage = match config.storage_type {
-        StorageType::RocksDb => Arc::new(RocksDbStorage::new(config.data_path)?),
-        _ => Arc::new(RocksDbStorage::new(config.data_path)?),
-    };
+    let storage = create_storage_engine(config.storage_type, config.data_path)?;
 
     // Initialize the vector index
     let index: Arc<RwLock<dyn VectorIndex>> = match config.index_type {
         IndexType::Flat => Arc::new(RwLock::new(FlatIndex::new())),
-        IndexType::KDTree => Arc::new(RwLock::new(KDTree::build_empty(config.dimension))),
-        IndexType::HNSW => Arc::new(RwLock::new(HnswIndex::new(
+        IndexType::KDTree => Arc::new(RwLock::new(KDTree::build_empty_with_config(
+            config.dimension,
+            config.kd_tree_config,
+        ))),
+        IndexType::HNSW => Arc::new(RwLock::new(HnswIndex::with_config(
             config.similarity,
             config.dimension,
+            config.hnsw_config,
         ))),
     };
 
@@ -252,15 +294,28 @@ mod tests {
 
     // Helper function to create a test database
     fn create_test_db() -> (VectorDb, TempDir) {
+        create_test_db_with_storage(StorageType::RocksDb)
+    }
+
+    fn create_test_db_with_storage(storage_type: StorageType) -> (VectorDb, TempDir) {
         let temp_dir = tempdir().unwrap();
         let config = DbConfig {
-            storage_type: StorageType::RocksDb,
+            storage_type,
             index_type: IndexType::Flat,
             data_path: temp_dir.path().to_path_buf(),
             dimension: 3,
             similarity: Similarity::Cosine,
+            hnsw_config: HnswConfig::default(),
+            kd_tree_config: KDTreeConfig::default(),
         };
         (init_api(config).unwrap(), temp_dir)
+    }
+
+    fn test_payload(content: &str) -> Payload {
+        Payload {
+            content_type: ContentType::Text,
+            content: content.to_string(),
+        }
     }
 
     #[test]
@@ -286,6 +341,20 @@ mod tests {
             ContentType::Text
         );
         assert_eq!(point.payload.as_ref().unwrap().content, "Test content");
+    }
+
+    #[test]
+    fn test_insert_and_get_with_in_memory_storage() {
+        let (db, _temp_dir) = create_test_db_with_storage(StorageType::InMemory);
+        let vector = vec![1.0, 2.0, 3.0];
+        let payload = test_payload("Test content");
+
+        let id = db.insert(vector.clone(), payload.clone()).unwrap();
+        let point = db.get(id).unwrap().unwrap();
+
+        assert_eq!(point.id, id);
+        assert_eq!(point.vector, Some(vector));
+        assert_eq!(point.payload, Some(payload));
     }
 
     #[test]
@@ -359,7 +428,14 @@ mod tests {
 
         // Search for the closest vector to [1.0, 0.1, 0.1]
         let query = vec![1.0, 0.1, 0.1];
-        let results = db.search(query, Similarity::Cosine, 1).unwrap();
+        let results = db
+            .search(SearchQueryInput {
+                vector: query,
+                similarity: Similarity::Cosine,
+                limit: 1,
+                ef: None,
+            })
+            .unwrap();
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], ids[0]); // The first vector should be closest
@@ -387,7 +463,14 @@ mod tests {
 
         // Search with limit 3
         let query = vec![0.0, 0.0, 0.0];
-        let results = db.search(query, Similarity::Euclidean, 3).unwrap();
+        let results = db
+            .search(SearchQueryInput {
+                vector: query,
+                similarity: Similarity::Euclidean,
+                limit: 3,
+                ef: None,
+            })
+            .unwrap();
 
         assert_eq!(results.len(), 3);
     }
@@ -397,7 +480,12 @@ mod tests {
         let (db, _temp_dir) = create_test_db();
 
         let query = vec![1.0, 2.0, 3.0];
-        let result = db.search(query, Similarity::Cosine, 0);
+        let result = db.search(SearchQueryInput {
+            vector: query,
+            similarity: Similarity::Cosine,
+            limit: 0,
+            ef: None,
+        });
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -416,7 +504,14 @@ mod tests {
         assert!(db.get(Uuid::new_v4()).unwrap().is_none());
 
         let query = vec![1.0, 2.0, 3.0];
-        let results = db.search(query, Similarity::Cosine, 10).unwrap();
+        let results = db
+            .search(SearchQueryInput {
+                vector: query,
+                similarity: Similarity::Cosine,
+                limit: 10,
+                ef: None,
+            })
+            .unwrap();
         assert_eq!(results.len(), 0);
     }
 
@@ -531,6 +626,34 @@ mod tests {
         // vector restore check
         assert!(loaded_db.get(id1).unwrap().unwrap().vector.unwrap() == v1);
         assert!(loaded_db.get(id2).unwrap().unwrap().vector.unwrap() == v2);
+    }
+
+    #[test]
+    fn test_create_and_load_snapshot_with_in_memory_storage() {
+        let (old_db, temp_dir) = create_test_db_with_storage(StorageType::InMemory);
+
+        let v1 = vec![0.0, 1.0, 2.0];
+        let v2 = vec![3.0, 4.0, 5.0];
+        let v3 = vec![6.0, 7.0, 8.0];
+
+        let id1 = old_db.insert(v1.clone(), test_payload("one")).unwrap();
+        let id2 = old_db.insert(v2.clone(), test_payload("two")).unwrap();
+
+        let temp_snapshot_dir = tempdir().unwrap();
+        let snapshot_path = old_db.create_snapshot(temp_snapshot_dir.path()).unwrap();
+
+        let id3 = old_db.insert(v3, test_payload("three")).unwrap();
+
+        let reload_config = DbRestoreConfig {
+            data_path: temp_dir.path().to_path_buf(),
+            snapshot_path,
+        };
+
+        let loaded_db = restore_from_snapshot(&reload_config).unwrap();
+
+        assert_eq!(loaded_db.get(id1).unwrap().unwrap().vector, Some(v1));
+        assert_eq!(loaded_db.get(id2).unwrap().unwrap().vector, Some(v2));
+        assert!(loaded_db.get(id3).unwrap().is_none());
     }
 
     #[test]

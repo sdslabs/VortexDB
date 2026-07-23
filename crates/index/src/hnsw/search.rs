@@ -5,7 +5,6 @@ use std::collections::HashSet;
 use defs::{OrdF32, PointId};
 
 use crate::Result;
-use crate::distance;
 
 use super::index::HnswIndex;
 
@@ -23,7 +22,7 @@ impl HnswIndex {
         let mut current = ep;
         loop {
             let cur_vec = self.get_vec(current)?;
-            let mut best_score = distance(query, cur_vec, self.similarity);
+            let mut best_score = self.distance(query, cur_vec);
             let mut best_id = current;
 
             let empty: &[PointId] = &[];
@@ -46,7 +45,7 @@ impl HnswIndex {
                     continue;
                 }
                 let n_vec = self.get_vec(n)?;
-                let score = distance(query, n_vec, self.similarity);
+                let score = self.distance(query, n_vec);
                 if score < best_score {
                     best_score = score;
                     best_id = n;
@@ -91,7 +90,7 @@ impl HnswIndex {
                 .unwrap_or(ep),
         };
 
-        let ep_score = distance(query, self.get_vec(seed)?, self.similarity);
+        let ep_score = self.distance(query, self.get_vec(seed)?);
         candidates.push((Reverse(OrdF32::new(ep_score)), seed));
         w_heap.push((OrdF32::new(ep_score), seed));
         visited.insert(seed);
@@ -114,7 +113,7 @@ impl HnswIndex {
                 .unwrap_or(empty);
 
             for &n in neighbors {
-                if visited.contains(&n) {
+                if !visited.insert(n) {
                     continue;
                 }
                 // Skip deleted neighbors
@@ -124,8 +123,7 @@ impl HnswIndex {
                     continue;
                 }
 
-                visited.insert(n);
-                let score = distance(query, self.get_vec(n)?, self.similarity);
+                let score = self.distance(query, self.get_vec(n)?);
                 let score = OrdF32::new(score);
                 candidates.push((Reverse(score), n));
                 if w_heap.len() < ef_construction {
@@ -168,7 +166,7 @@ impl HnswIndex {
             let cand_vec = self.get_vec(cand_id)?;
             for &r_id in &result {
                 let r_vec = self.get_vec(r_id)?;
-                let cand_to_r = distance(cand_vec, r_vec, self.similarity);
+                let cand_to_r = self.distance(cand_vec, r_vec);
                 if cand_to_r < cand_dist_to_q {
                     continue 'outer;
                 }
@@ -273,7 +271,7 @@ impl HnswIndex {
         let mut scored: Vec<(PointId, f32)> = Vec::with_capacity(merged.len());
 
         for nid in merged {
-            let d = distance(center_vec, self.get_vec(nid)?, self.similarity);
+            let d = self.distance(center_vec, self.get_vec(nid)?);
             scored.push((nid, d));
         }
         scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());

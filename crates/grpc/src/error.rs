@@ -135,6 +135,15 @@ impl From<storage::error::StorageError> for GrpcError {
             StorageError::RocksDbFlush { source: _ } => GrpcError::Internal {
                 message: "flush error".to_string(),
             },
+            StorageError::InMemoryLock {} => GrpcError::Internal {
+                message: "failed to lock in-memory storage".to_string(),
+            },
+            StorageError::InMemoryCheckpoint { msg } => GrpcError::Internal {
+                message: format!("in-memory checkpoint error: {}", msg),
+            },
+            StorageError::InMemoryCheckpointIo { msg, source: _ } => GrpcError::Internal {
+                message: format!("in-memory checkpoint io error: {}", msg),
+            },
         }
     }
 }

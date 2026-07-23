@@ -37,6 +37,15 @@ pub enum StorageError {
     #[snafu(display("Failed to iterate over storage: {source}"))]
     RocksDbIteration { source: rocksdb::Error },
 
+    #[snafu(display("Failed to lock in-memory storage"))]
+    InMemoryLock {},
+
+    #[snafu(display("In-memory checkpoint error: {}", msg))]
+    InMemoryCheckpoint { msg: String },
+
+    #[snafu(display("{} : {}", msg, source))]
+    InMemoryCheckpointIo { msg: String, source: std::io::Error },
+
     #[snafu(display("Failed to serialize point {id}: {source}"))]
     Serialization { id: PointId, source: bincode::Error },
 

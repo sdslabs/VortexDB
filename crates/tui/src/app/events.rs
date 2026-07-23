@@ -1,6 +1,6 @@
 use super::{App, AppState, ModalType, VectorListItem};
 use crossterm::event::{Event, KeyCode, KeyEvent};
-use defs::{ContentType, Payload, Similarity};
+use defs::{ContentType, Payload, SearchQueryInput, Similarity};
 use std::io;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -313,7 +313,14 @@ fn execute_modal_action(app: &mut App) -> io::Result<()> {
                 }
             };
 
-            let ids = db.search(query, Similarity::Cosine, k).map_err(to_io)?;
+            let ids = db
+                .search(SearchQueryInput {
+                    vector: query,
+                    similarity: Similarity::Cosine,
+                    limit: k,
+                    ef: None,
+                })
+                .map_err(to_io)?;
 
             app.vector_list_items.clear();
             app.vector_detail = None;

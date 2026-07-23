@@ -65,9 +65,11 @@ Both APIs support the same core operations:
 | Operation | gRPC Method | HTTP Endpoint |
 |-----------|-------------|---------------|
 | Insert vector | `InsertVector` | `POST /points` |
+| Batch insert | `InsertVectorsBatch` | `POST /points/batch` |
 | Get point | `GetPoint` | `GET /points/:id` |
 | Delete point | `DeletePoint` | `DELETE /points/:id` |
 | Search vectors | `SearchPoints` | `POST /points/search` |
+| Batch search | `SearchPointsBatch` | `POST /points/search/batch` |
 | Health check | - | `GET /health` |
 
 ## Error Handling

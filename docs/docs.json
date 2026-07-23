@@ -1,0 +1,129 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "VortexDB",
+  "colors": {
+    "primary": "#00d4aa",
+    "light": "#00e6b8",
+    "dark": "#00b894"
+  },
+  "favicon": "/assets/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/installation",
+              "getting-started/quickstart"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/indexers",
+              "concepts/snapshots"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/docker-compose",
+              "guides/python-sdk",
+              "guides/tui-walkthrough"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Reference",
+            "pages": [
+              "api-reference/overview",
+              "api-reference/grpc",
+              "api-reference/http"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "SDK",
+        "groups": [
+          {
+            "group": "SDK",
+            "pages": [
+              "sdk/reference",
+              "sdk/examples"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/sdslabs/VortexDB",
+          "icon": "github"
+        },
+        {
+          "anchor": "Community",
+          "href": "https://discord.gg/dXkVEgTPu9",
+          "icon": "discord"
+        },
+        {
+          "anchor": "SDSLabs",
+          "href": "https://sdslabs.co",
+          "icon": "globe"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo_horizontal.svg",
+    "dark": "/logo_horizontal.svg"
+  },
+  "api": {
+    "openapi": "openapi.yaml",
+    "mdx": {
+      "server": "http://localhost:3000"
+    }
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "background": {
+    "color": {
+      "dark": "#0a0a0f"
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "SDSLabs",
+        "href": "https://sdslabs.co"
+      },
+      {
+        "label": "Discord",
+        "href": "https://discord.gg/dXkVEgTPu9"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Github",
+      "href": "https://github.com/sdslabs/VortexDB"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/sdslabs/VortexDB",
+      "discord": "https://discord.gg/dXkVEgTPu9",
+      "website": "https://sdslabs.co"
+    }
+  }
+}

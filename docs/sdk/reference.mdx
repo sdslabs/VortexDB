@@ -80,22 +80,9 @@ def insert(
 ) -> str
 ```
 
-<ParamField body="vector" type="DenseVector" required>
-  The vector to insert. Must match the server's configured dimension.
-</ParamField>
-
-<ParamField body="payload" type="Payload" required>
-  Metadata to associate with the vector.
-</ParamField>
-
 <ResponseField name="return" type="str">
-  The UUID of the created point.
+  UUID of the created point.
 </ResponseField>
-
-**Raises:**
-- `TypeError`: If vector is not a `DenseVector`
-- `InvalidArgumentError`: If vector dimensions don't match
-- `AuthenticationError`: If API key is invalid
 
 **Example:**
 
@@ -104,7 +91,33 @@ point_id = db.insert(
     vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
     payload=Payload.text("My document"),
 )
-print(f"Created point: {point_id}")
+```
+
+---
+
+#### batch_insert
+
+Insert multiple vectors in a single request.
+
+```python
+def batch_insert(
+    self,
+    *,
+    items: list[tuple[DenseVector, Payload]],
+) -> list[str]
+```
+
+<ResponseField name="return" type="list[str]">
+  List of UUIDs for the created points, in input order.
+</ResponseField>
+
+**Example:**
+
+```python
+ids = db.batch_insert(items=[
+    (DenseVector([0.1, 0.2, 0.3]), Payload.text("doc one")),
+    (DenseVector([0.4, 0.5, 0.6]), Payload.text("doc two")),
+])
 ```
 
 ---
@@ -121,28 +134,17 @@ def get(
 ) -> Point | None
 ```
 
-<ParamField body="point_id" type="str" required>
-  The UUID of the point to retrieve.
-</ParamField>
-
 <ResponseField name="return" type="Point | None">
   The point if found, `None` otherwise.
 </ResponseField>
-
-**Raises:**
-- `AuthenticationError`: If API key is invalid
-- `InternalServerError`: On server error
 
 **Example:**
 
 ```python
 point = db.get(point_id="550e8400-e29b-41d4-a716-446655440000")
-
 if point:
     print(f"Vector: {point.vector.to_list()}")
     print(f"Payload: {point.payload.content}")
-else:
-    print("Point not found")
 ```
 
 ---
@@ -155,45 +157,72 @@ Search for the k nearest neighbors to a query vector.
 def search(
     self,
     *,
-    vector: DenseVector,
-    similarity: Similarity,
-    limit: int,
+    vector: DenseVector | None = None,
+    similarity: Similarity | None = None,
+    limit: int | None = None,
+    query: SearchQuery | None = None,
+    ef: int | None = None,
 ) -> List[str]
 ```
 
-<ParamField body="vector" type="DenseVector" required>
-  The query vector. Must match the server's configured dimension.
+<ParamField body="query" type="SearchQuery" default="None">
+  A `SearchQuery` object bundling vector, similarity, and limit. Use this or pass individual args.
 </ParamField>
 
-<ParamField body="similarity" type="Similarity" required>
-  The distance metric to use for comparison.
-</ParamField>
-
-<ParamField body="limit" type="int" required>
-  Maximum number of results to return.
+<ParamField body="ef" type="int" default="None">
+  Search breadth for HNSW. Uses server default if not set.
 </ParamField>
 
 <ResponseField name="return" type="List[str]">
   List of point IDs ordered by similarity (closest first).
 </ResponseField>
 
-**Raises:**
-- `TypeError`: If vector is not a `DenseVector`
-- `InvalidArgumentError`: If vector dimensions don't match
-- `AuthenticationError`: If API key is invalid
-
 **Example:**
 
 ```python
+# Using a SearchQuery
+query = SearchQuery(DenseVector([0.1, 0.2, 0.3, 0.4]), Similarity.COSINE, 10)
+results = db.search(query=query)
+
+# Using individual args with ef
 results = db.search(
     vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
     similarity=Similarity.COSINE,
     limit=10,
+    ef=200,
 )
+```
 
-for point_id in results:
-    point = db.get(point_id=point_id)
-    print(f"  - {point.payload.content}")
+---
+
+#### batch_search
+
+Search against multiple query vectors in a single request.
+
+```python
+def batch_search(
+    self,
+    *,
+    queries,
+    similarity: Similarity | None = None,
+    limit: int | None = None,
+    ef: int | None = None,
+) -> List[List[str]]
+```
+
+Accepts `List[SearchQuery]`, `List[(DenseVector, Similarity, int)]`, or bare `List[DenseVector]` with global `similarity` and `limit`.
+
+<ResponseField name="return" type="List[List[str]]">
+  One result list per input query.
+</ResponseField>
+
+**Example:**
+
+```python
+results = db.batch_search(queries=[
+    SearchQuery(DenseVector([0.1, 0.2, 0.3]), Similarity.COSINE, 5),
+    (DenseVector([0.4, 0.5, 0.6]), Similarity.EUCLIDEAN, 3),
+])
 ```
 
 ---
@@ -209,14 +238,6 @@ def delete(
     point_id: str,
 ) -> None
 ```
-
-<ParamField body="point_id" type="str" required>
-  The UUID of the point to delete.
-</ParamField>
-
-**Raises:**
-- `AuthenticationError`: If API key is invalid
-- `InternalServerError`: On server error
 
 **Example:**
 
@@ -477,12 +498,31 @@ from vortexdb.models import ContentType
 
 ---
 
+## SearchQuery
+
+Bundles a search's parameters into a single object.
+
+```python
+from vortexdb import SearchQuery
+
+query = SearchQuery(DenseVector([0.1, 0.2, 0.3]), Similarity.COSINE, 10)
+results = db.search(query=query)
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `vector` | `DenseVector` | Query vector |
+| `similarity` | `Similarity` | Distance metric |
+| `limit` | `int` | Max results |
+
+---
+
 ## Exceptions
 
 All exceptions inherit from `VortexDBError`.
 
 ```python
-from vortexdb.exceptions import (
+from vortexdb import (
     VortexDBError,
     AuthenticationError,
     NotFoundError,
@@ -490,7 +530,6 @@ from vortexdb.exceptions import (
     TimeoutError,
     ServiceUnavailableError,
     InternalServerError,
-    ConfigurationError,
 )
 ```
 
@@ -505,7 +544,6 @@ from vortexdb.exceptions import (
 | `TimeoutError` | Request timed out |
 | `ServiceUnavailableError` | Server is unavailable |
 | `InternalServerError` | Server-side error |
-| `ConfigurationError` | Invalid client configuration |
 
 **Example:**
 
@@ -582,7 +620,7 @@ def search_documents(
   <Card title="SDK Examples" icon="code" href="/sdk/examples">
     Working code examples
   </Card>
-  <Card title="Python SDK Guide" icon="python" href="/guides/python-sdk">
-    Build a semantic search app
+  <Card title="API Reference" icon="code" href="/api-reference/overview">
+    gRPC and HTTP API docs
   </Card>
 </CardGroup>

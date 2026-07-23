@@ -3,7 +3,7 @@ info:
   title: VortexDB HTTP API
   description: |
     RESTful API for VortexDB - a high-performance vector database built in Rust.
-    
+
     This API provides CRUD operations for vector points and similarity search.
   version: 1.0.0
   license:
@@ -97,6 +97,53 @@ paths:
               schema:
                 type: string
                 example: Failed to insert point
+
+  /points/batch:
+    post:
+      tags:
+        - Points
+      summary: Batch insert points
+      description: Insert multiple vectors in a single request
+      operationId: batchInsertPoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchInsertRequest'
+            example:
+              vectors:
+                - vector: [0.1, 0.2, 0.3, 0.4]
+                  payload:
+                    content_type: Text
+                    content: Document one
+                - vector: [0.5, 0.6, 0.7, 0.8]
+                  payload:
+                    content_type: Text
+                    content: Document two
+      responses:
+        '201':
+          description: Points created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchInsertResponse'
+              example:
+                point_ids:
+                  - 550e8400-e29b-41d4-a716-446655440000
+                  - 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+        '400':
+          description: Invalid request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Server error
+          content:
+            text/plain:
+              schema:
+                type: string
 
   /points/{point_id}:
     get:
@@ -211,6 +258,52 @@ paths:
                 type: string
                 example: Search failed
 
+  /points/search/batch:
+    post:
+      tags:
+        - Points
+      summary: Batch search for similar vectors
+      description: Search against multiple query vectors in a single request
+      operationId: batchSearchPoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchSearchRequest'
+            example:
+              queries:
+                - vector: [0.1, 0.2, 0.3, 0.4]
+                  similarity: Cosine
+                  limit: 2
+                - vector: [0.5, 0.6, 0.7, 0.8]
+                  similarity: Euclidean
+                  limit: 2
+      responses:
+        '200':
+          description: Batch search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSearchResponse'
+              example:
+                results:
+                  - - 550e8400-e29b-41d4-a716-446655440000
+                    - 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+                  - - f47ac10b-58cc-4372-a567-0e02b2c3d479
+        '400':
+          description: Invalid request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Server error
+          content:
+            text/plain:
+              schema:
+                type: string
+
 components:
   schemas:
     DenseVector:
@@ -296,6 +389,29 @@ components:
           description: UUID of the created point
           example: 550e8400-e29b-41d4-a716-446655440000
 
+    BatchInsertRequest:
+      type: object
+      required:
+        - vectors
+      properties:
+        vectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsertRequest'
+          description: Array of insert objects
+
+    BatchInsertResponse:
+      type: object
+      required:
+        - point_ids
+      properties:
+        point_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: UUIDs of the created points, in input order
+
     SearchRequest:
       type: object
       required:
@@ -327,3 +443,28 @@ components:
           example:
             - 550e8400-e29b-41d4-a716-446655440000
             - 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+
+    BatchSearchRequest:
+      type: object
+      required:
+        - queries
+      properties:
+        queries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchRequest'
+          description: Array of search query objects
+
+    BatchSearchResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+              format: uuid
+          description: One result array per input query

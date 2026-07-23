@@ -13,11 +13,11 @@ VortexDB's HTTP API provides a RESTful interface for vector operations using JSO
 http://localhost:3000
 ```
 
-The port can be configured via the `HTTP_PORT` environment variable.
+The port can be configured via the `HTTP_PORT` environment variable. The server binds to `127.0.0.1` by default.
 
-<Note>
-The HTTP API does not require authentication and is designed for development and trusted internal networks. For production, use the gRPC API or deploy behind a reverse proxy with authentication.
-</Note>
+<Warning>
+The HTTP API has no authentication. Always deploy behind a reverse proxy or disable it with `DISABLE_HTTP=true` in production.
+</Warning>
 
 ---
 
@@ -67,7 +67,7 @@ Vector Database server is running!
 
 <ParamField body="payload" type="object" required>
   Metadata object associated with the vector.
-  
+
   <Expandable title="payload properties">
     <ParamField body="content_type" type="string" required>
       Type of content: `"Text"` or `"Image"`
@@ -79,7 +79,7 @@ Vector Database server is running!
 </ParamField>
 
 <ResponseField name="point_id" type="string">
-  The UUID of the created point.
+  UUID of the created point.
 </ResponseField>
 
 <CodeGroup>
@@ -111,12 +111,61 @@ curl -X POST http://localhost:3000/points \
 
 ---
 
+### Batch Insert
+
+Insert multiple vectors in a single request.
+
+<ParamField body="vectors" type="array" required>
+  Array of insert objects, each with `vector` and `payload` fields (same shape as single insert).
+</ParamField>
+
+<ResponseField name="point_ids" type="array">
+  Array of UUIDs for each created point, in the same order as the input.
+</ResponseField>
+
+<CodeGroup>
+```bash Request
+curl -X POST http://localhost:3000/points/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vectors": [
+      {
+        "vector": [0.1, 0.2, 0.3, 0.4],
+        "payload": {"content_type": "Text", "content": "Document one"}
+      },
+      {
+        "vector": [0.5, 0.6, 0.7, 0.8],
+        "payload": {"content_type": "Text", "content": "Document two"}
+      }
+    ]
+  }'
+```
+
+```json Response (201 Created)
+{
+  "point_ids": [
+    "550e8400-e29b-41d4-a716-446655440000",
+    "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+  ]
+}
+```
+</CodeGroup>
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | Invalid JSON or missing fields |
+| `500 Internal Server Error` | Server error during insertion |
+
+---
+
 ### Get Point
 
 Retrieve a point by its ID.
 
 <ParamField path="id" type="string" required>
-  The UUID of the point to retrieve.
+  UUID of the point to retrieve.
 </ParamField>
 
 <ResponseField name="id" type="string">
@@ -162,7 +211,7 @@ curl http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000
 Delete a point by its ID.
 
 <ParamField path="id" type="string" required>
-  The UUID of the point to delete.
+  UUID of the point to delete.
 </ParamField>
 
 <CodeGroup>
@@ -234,42 +283,46 @@ curl -X POST http://localhost:3000/points/search \
 
 ---
 
-## Data Types
+### Batch Search
 
-### Vector
+Search against multiple query vectors in a single request.
 
-An array of floating-point numbers:
+<ParamField body="queries" type="array" required>
+  Array of search query objects, each with `vector`, `similarity`, and `limit`.
+</ParamField>
 
-```json
-[0.1, 0.2, 0.3, 0.4]
+<ResponseField name="results" type="array">
+  Array of result arrays, one per input query, each ordered by similarity.
+</ResponseField>
+
+<CodeGroup>
+```bash Request
+curl -X POST http://localhost:3000/points/search/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "queries": [
+      {"vector": [0.1, 0.2, 0.3, 0.4], "similarity": "Cosine", "limit": 2},
+      {"vector": [0.5, 0.6, 0.7, 0.8], "similarity": "Euclidean", "limit": 2}
+    ]
+  }'
 ```
 
-<Warning>
-The vector length must match the `DIMENSION` environment variable configured on the server.
-</Warning>
-
-### Payload
-
-```json
+```json Response (200 OK)
 {
-  "content_type": "Text",
-  "content": "Your content here"
+  "results": [
+    ["550e8400-...", "6ba7b810-..."],
+    ["f47ac10b-...", "9a1b2c3d-..."]
+  ]
 }
 ```
+</CodeGroup>
 
-| Field | Type | Values |
-|-------|------|--------|
-| `content_type` | string | `"Text"` or `"Image"` |
-| `content` | string | Any string content |
+**Error Responses:**
 
-### Similarity
-
-| Value | Description |
-|-------|-------------|
-| `"Euclidean"` | L2 distance (straight line) |
-| `"Manhattan"` | L1 distance (city block) |
-| `"Hamming"` | Count of differing elements |
-| `"Cosine"` | Angular distance (1 - cosine similarity) |
+| Status | Description |
+|--------|-------------|
+| `400 Bad Request` | Invalid JSON or missing fields |
+| `500 Internal Server Error` | Server error during search |
 
 ---
 
@@ -325,19 +378,6 @@ curl -X POST http://localhost:3000/points/search \
 curl -X DELETE http://localhost:3000/points/$POINT_ID
 ```
 
-### Batch Insert (using shell loop)
-
-```bash
-for i in {1..10}; do
-  curl -s -X POST http://localhost:3000/points \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"vector\": [$(echo "scale=2; $i/10" | bc), $(echo "scale=2; $i/10 + 0.1" | bc), 0.3, 0.4],
-      \"payload\": {\"content_type\": \"Text\", \"content\": \"Document $i\"}
-    }"
-done
-```
-
 ---
 
 ## OpenAPI Specification
@@ -358,7 +398,7 @@ You can import this into tools like Postman or Swagger UI for interactive API ex
   <Card title="gRPC API" icon="bolt" href="/api-reference/grpc">
     High-performance gRPC API reference
   </Card>
-  <Card title="Python SDK" icon="python" href="/guides/python-sdk">
-    Build applications with the Python client
+  <Card title="Python SDK" icon="python" href="/sdk/reference">
+    Python client documentation
   </Card>
 </CardGroup>

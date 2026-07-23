@@ -5,45 +5,7 @@ description: "Understanding VortexDB's modular architecture"
 
 # Architecture
 
-VortexDB is a high-performance vector database built in Rust, designed with modularity and flexibility at its core. This page explains how the components work together.
-
-## High-Level Overview
-
-```mermaid
-flowchart TB
-    subgraph Clients
-        HTTP[HTTP Client]
-        GRPC[gRPC Client]
-        SDK[Python SDK<br/><small>gRPC under hood</small>]
-    end
-
-    subgraph Server[VortexDB Server]
-        subgraph Transport[Transport Layer]
-            HTTPLayer[HTTP Layer<br/><small>Axum</small>]
-            GRPCLayer[gRPC Layer<br/><small>tonic + prost</small>]
-        end
-        
-        API[API Core]
-        
-        subgraph Backend[Backend Layer]
-            Index[Index Layer]
-            Storage[Storage Layer]
-            Snapshot[Snapshot Engine]
-        end
-    end
-
-    HTTP --> HTTPLayer
-    GRPC --> GRPCLayer
-    SDK --> GRPCLayer
-    
-    HTTPLayer <--> GRPCLayer
-    HTTPLayer --> API
-    GRPCLayer --> API
-    
-    API --> Index
-    API --> Storage
-    API --> Snapshot
-```
+VortexDB is a high-performance vector database built in Rust, designed with modularity and flexibility at its core.
 
 ## Crate Structure
 
@@ -187,15 +149,20 @@ VortexDB is configured via environment variables:
 |----------|----------|---------|-------------|
 | `GRPC_ROOT_PASSWORD` | Yes | - | Authentication password for gRPC |
 | `DIMENSION` | Yes | - | Vector dimensionality |
-| `DATA_PATH` | No | `/data` | Path for persistent storage |
-| `HTTP_HOST` | No | `0.0.0.0` | HTTP server bind address |
+| `DATA_PATH` | No | system temp dir | Directory for persistent storage |
+| `HTTP_HOST` | No | `127.0.0.1` | HTTP server bind address |
 | `HTTP_PORT` | No | `3000` | HTTP server port |
-| `GRPC_HOST` | No | `0.0.0.0` | gRPC server bind address |
+| `GRPC_HOST` | No | `127.0.0.1` | gRPC server bind address |
 | `GRPC_PORT` | No | `50051` | gRPC server port |
-| `STORAGE_TYPE` | No | `inmemory` | Storage backend |
-| `INDEX_TYPE` | No | `flat` | Index algorithm |
+| `STORAGE_TYPE` | No | `inmemory` | Storage backend: `inmemory` or `rocksdb` |
+| `INDEX_TYPE` | No | `flat` | Index algorithm: `flat`, `kdtree`, or `hnsw` |
+| `SIMILARITY` | No | `cosine` | Default metric: `cosine`, `euclidean`, `manhattan`, or `hamming` |
 | `LOGGING` | No | `true` | Enable logging |
 | `DISABLE_HTTP` | No | `false` | Run gRPC only |
+| `HNSW_M` | No | `16` | HNSW max connections per layer |
+| `HNSW_M0` | No | `2 * HNSW_M` | HNSW max connections for layer 0 |
+| `HNSW_EF_CONSTRUCTION` | No | `200` | HNSW search breadth during construction |
+| `HNSW_EF` | No | `100` | HNSW default search breadth at query time |
 
 ## Thread Safety
 

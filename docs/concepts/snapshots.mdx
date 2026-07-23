@@ -130,13 +130,7 @@ pub struct StorageCheckpoint {
 
 ## Snapshot Engine
 
-The `SnapshotEngine` automates periodic snapshots:
-
-### Features
-
-- **Scheduled backups**: Automatically creates snapshots at configured intervals
-- **Retention policy**: Keeps the `k` most recent snapshots
-- **Background operation**: Runs in a separate thread without blocking queries
+The `SnapshotEngine` manages snapshot creation and restoration:
 
 ### Registry Interface
 
@@ -190,46 +184,13 @@ The manifest (`manifest.json`) contains all metadata needed for restore:
 }
 ```
 
-## Consistency Guarantees
-
-VortexDB snapshots provide the following guarantees:
-
-<AccordionGroup>
-  <Accordion title="Atomicity">
-    A snapshot represents a consistent point-in-time view. Either the entire snapshot succeeds, or no partial state is written.
-  </Accordion>
-  <Accordion title="Integrity">
-    SHA-256 checksums verify that snapshot files haven't been corrupted or tampered with during storage or transfer.
-  </Accordion>
-  <Accordion title="Version Compatibility">
-    Each snapshot includes a parser version. VortexDB will refuse to restore snapshots from incompatible versions to prevent data corruption.
-  </Accordion>
-</AccordionGroup>
-
-## Best Practices
-
-<CardGroup cols={2}>
-  <Card title="Regular Backups" icon="clock">
-    Configure automated snapshots based on your data change rate
-  </Card>
-  <Card title="Test Restores" icon="vial">
-    Periodically verify that snapshots can be successfully restored
-  </Card>
-  <Card title="Off-site Storage" icon="cloud">
-    Copy snapshots to external storage for disaster recovery
-  </Card>
-  <Card title="Monitor Space" icon="hard-drive">
-    Track snapshot sizes and adjust retention policies accordingly
-  </Card>
-</CardGroup>
-
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Docker Compose Guide" icon="docker" href="/guides/docker-compose">
-    Deploy VortexDB with persistent snapshots
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Understand how components fit together
   </Card>
-  <Card title="API Reference" icon="code" href="/api-reference/overview">
-    Learn how to trigger snapshots via API
+  <Card title="Indexers" icon="magnifying-glass" href="/concepts/indexers">
+    Choose the right index for your use case
   </Card>
 </CardGroup>

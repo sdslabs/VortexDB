@@ -207,17 +207,6 @@ with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
         print(f"  - {point.payload.content}")
 ```
 
-## Distance Metrics
-
-VortexDB supports four distance/similarity metrics:
-
-| Metric | Description | Best For |
-|--------|-------------|----------|
-| `COSINE` | Measures angle between vectors | Text embeddings, normalized vectors |
-| `EUCLIDEAN` | L2 distance (straight line) | General purpose |
-| `MANHATTAN` | L1 distance (city block) | Sparse vectors |
-| `HAMMING` | Count of differing elements | Binary vectors |
-
 ## Next Steps
 
 <CardGroup cols={2}>
@@ -227,8 +216,8 @@ VortexDB supports four distance/similarity metrics:
   <Card title="Indexers" icon="magnifying-glass" href="/concepts/indexers">
     Choose the right index for your use case
   </Card>
-  <Card title="Python SDK Guide" icon="python" href="/guides/python-sdk">
-    Build a semantic search application
+  <Card title="Python SDK" icon="python" href="/sdk/reference">
+    Python client documentation
   </Card>
   <Card title="API Reference" icon="code" href="/api-reference/overview">
     Explore the complete API

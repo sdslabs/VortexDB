@@ -39,17 +39,12 @@ syntax = "proto3";
 package vectordb;
 
 service VectorDB {
-  // Insert a vector with a payload and return the assigned PointID
   rpc InsertVector(InsertVectorRequest) returns (PointID);
-
-  // Delete a vector by its PointID
+  rpc InsertVectorsBatch(InsertVectorsBatchRequest) returns (InsertVectorsBatchResponse);
   rpc DeletePoint(PointID) returns (google.protobuf.Empty);
-
-  // Get a vector and its payload by PointID
   rpc GetPoint(PointID) returns (Point);
-
-  // Search for the k nearest vectors to a target vector
   rpc SearchPoints(SearchRequest) returns (SearchResponse);
+  rpc SearchPointsBatch(SearchPointsBatchRequest) returns (SearchPointsBatchResponse);
 }
 ```
 
@@ -221,6 +216,10 @@ Search for the k nearest neighbors to a query vector.
   Maximum number of results to return.
 </ParamField>
 
+<ParamField body="ef" type="uint64">
+  Search breadth for HNSW. Larger values trade speed for accuracy. Defaults to the server's `HNSW_EF` setting.
+</ParamField>
+
 **Request:**
 
 ```protobuf
@@ -228,6 +227,7 @@ message SearchRequest {
   DenseVector query_vector = 1;
   Similarity similarity = 2;
   uint64 limit = 3;
+  uint64 ef = 4;
 }
 ```
 
@@ -247,7 +247,8 @@ grpcurl -plaintext \
   -d '{
     "query_vector": {"values": [0.1, 0.2, 0.3, 0.4]},
     "similarity": 3,
-    "limit": 5
+    "limit": 5,
+    "ef": 200
   }' \
   localhost:50051 vectordb.VectorDB/SearchPoints
 ```
@@ -261,6 +262,78 @@ grpcurl -plaintext \
     {"id": {"value": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"}}
   ]
 }
+```
+
+---
+
+### InsertVectorsBatch
+
+Insert multiple vectors in a single request.
+
+**Request:**
+
+```protobuf
+message InsertVectorsBatchRequest {
+  repeated InsertVectorRequest vectors = 1;
+}
+```
+
+**Response:**
+
+```protobuf
+message InsertVectorsBatchResponse {
+  repeated PointID ids = 1;
+}
+```
+
+**Example:**
+
+```bash
+grpcurl -plaintext \
+  -H "authorization: secret" \
+  -d '{
+    "vectors": [
+      {"vector": {"values": [0.1, 0.2, 0.3]}, "payload": {"content_type": 1, "content": "doc one"}},
+      {"vector": {"values": [0.4, 0.5, 0.6]}, "payload": {"content_type": 1, "content": "doc two"}}
+    ]
+  }' \
+  localhost:50051 vectordb.VectorDB/InsertVectorsBatch
+```
+
+---
+
+### SearchPointsBatch
+
+Search against multiple query vectors in a single request.
+
+**Request:**
+
+```protobuf
+message SearchPointsBatchRequest {
+  repeated SearchRequest queries = 1;
+}
+```
+
+**Response:**
+
+```protobuf
+message SearchPointsBatchResponse {
+  repeated SearchResponse results = 1;
+}
+```
+
+**Example:**
+
+```bash
+grpcurl -plaintext \
+  -H "authorization: secret" \
+  -d '{
+    "queries": [
+      {"query_vector": {"values": [0.1, 0.2, 0.3]}, "similarity": 3, "limit": 2},
+      {"query_vector": {"values": [0.4, 0.5, 0.6]}, "similarity": 0, "limit": 2}
+    ]
+  }' \
+  localhost:50051 vectordb.VectorDB/SearchPointsBatch
 ```
 
 ---
@@ -361,12 +434,19 @@ with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
         vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
         payload=Payload.text("Hello")
     )
-    
-    # Search
+
+    # Batch insert
+    ids = db.batch_insert(items=[
+        (DenseVector([0.1, 0.2, 0.3]), Payload.text("doc one")),
+        (DenseVector([0.4, 0.5, 0.6]), Payload.text("doc two")),
+    ])
+
+    # Search with ef parameter
     results = db.search(
         vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
         similarity=Similarity.COSINE,
-        limit=5
+        limit=5,
+        ef=200,
     )
 ```
 
@@ -375,20 +455,11 @@ with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
 Use `protoc` to generate clients in any language:
 
 ```bash
-# Python
 python -m grpc_tools.protoc \
   -I./crates/grpc/proto \
   --python_out=./client \
   --grpc_python_out=./client \
   ./crates/grpc/proto/vector-db.proto
-
-# Go
-protoc --go_out=. --go-grpc_out=. vector-db.proto
-
-# TypeScript
-protoc --plugin=protoc-gen-ts \
-  --ts_out=./client \
-  vector-db.proto
 ```
 
 ## Next Steps

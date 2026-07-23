@@ -7,32 +7,9 @@ description: "Choosing the right vector index for your use case"
 
 VortexDB supports multiple indexing algorithms, each optimized for different use cases. The index determines how vectors are organized for similarity search.
 
-## Overview
-
-| Index | Search Time | Build Time | Memory | Best For |
-|-------|------------|------------|--------|----------|
-| **Flat** | O(n) | O(1) | Low | Small datasets, exact results |
-| **KD-Tree** | O(log n) avg | O(n log n) | Medium | Low-dimensional vectors |
-| **HNSW** | O(log n) | O(n log n) | Higher | Large-scale approximate search |
-
 ## Flat Index
 
 The **Flat** index performs brute-force exhaustive search by computing distances to every vector.
-
-### Characteristics
-
-<AccordionGroup>
-  <Accordion title="Pros">
-    - **100% recall**: Always returns the exact nearest neighbors
-    - **No build time**: Vectors are simply appended
-    - **Works in any dimension**: No curse of dimensionality
-    - **Simple and predictable**: Easy to reason about
-  </Accordion>
-  <Accordion title="Cons">
-    - **Linear search time**: Scans every vector for each query
-    - **Not scalable**: Impractical for millions of vectors
-  </Accordion>
-</AccordionGroup>
 
 ### When to Use
 
@@ -49,20 +26,6 @@ INDEX_TYPE=flat
 The **KD-Tree** (k-dimensional tree) is a space-partitioning data structure that recursively divides the vector space.
 
 At each level, the tree splits data along a different dimension (cycling through x, y, z, ...).
-
-### Characteristics
-
-<AccordionGroup>
-  <Accordion title="Pros">
-    - **Fast for low dimensions**: O(log n) average search time when d < 20
-    - **Exact results**: Returns true nearest neighbors
-    - **Efficient updates**: Supports incremental insertions
-  </Accordion>
-  <Accordion title="Cons">
-    - **Curse of dimensionality**: Performance degrades above ~20 dimensions
-    - **Rebalancing needed**: Can become unbalanced with many deletions
-  </Accordion>
-</AccordionGroup>
 
 ### When to Use
 
@@ -83,28 +46,6 @@ For high-dimensional embeddings (e.g., 384, 768, 1536 dimensions common in ML), 
 **HNSW** (Hierarchical Navigable Small World) is a state-of-the-art approximate nearest neighbor algorithm based on proximity graphs. It constructs a multi-layered graph where each layer represents a different level of granularity, enabling efficient navigation from coarse to fine-grained similarity search. 
 
 Check out this [blog post](https://blog.sdslabs.co/2026/03/hnsw-index) for more theoretical details and [this blog](https://blog.sdslabs.co/2026/03/hnsw-indexp2) covering implementation in VortexDB.
-
-### Characteristics
-
-<AccordionGroup>
-  <Accordion title="Pros">
-    - **Sub-linear search**: O(log n) regardless of dimensions
-    - **High recall**: Typically 95-99%+ with proper tuning
-    - **Scales to billions**: Used by major vector databases
-    - **Handles high dimensions**: Works well with 768+ dimensional vectors
-  </Accordion>
-  <Accordion title="Cons">
-    - **Higher memory**: Graph structure adds overhead
-    - **Approximate results**: May miss exact nearest neighbors
-    - **Build time**: Initial index construction is slower
-  </Accordion>
-</AccordionGroup>
-
-### Algorithm Reference
-
-VortexDB's HNSW implementation follows the original paper:
-
-> Malkov, Y. A., & Yashunin, D. A. (2018). *Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs*. [arXiv:1603.09320](https://arxiv.org/abs/1603.09320)
 
 ### When to Use
 

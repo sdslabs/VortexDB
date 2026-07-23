@@ -42,12 +42,13 @@ DIMENSION=384  # Vector dimension (e.g., 384 for MiniLM embeddings)
 DATA_PATH=/data
 
 # Optional settings (with defaults)
-HTTP_HOST=0.0.0.0
+HTTP_HOST=127.0.0.1
 HTTP_PORT=3000
-GRPC_HOST=0.0.0.0
+GRPC_HOST=127.0.0.1
 GRPC_PORT=50051
 STORAGE_TYPE=inmemory    # inmemory | rocksdb
 INDEX_TYPE=flat          # flat | kdtree | hnsw
+SIMILARITY=cosine        # cosine | euclidean | manhattan | hamming
 LOGGING=true
 DISABLE_HTTP=false
 ```

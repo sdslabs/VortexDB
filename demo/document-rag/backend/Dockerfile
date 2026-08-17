@@ -7,9 +7,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
 
-RUN mkdir -p /app/uploads
+RUN mkdir -p /app/documents
 
 ENV PYTHONPATH=/app
+ENV DOCS_DIRECTORY=/app/documents
 
 EXPOSE 8000
 

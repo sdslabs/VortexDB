@@ -1,0 +1,5 @@
+VortexDB Overview
+
+VortexDB is a vector database designed for semantic search and retrieval-augmented generation (RAG).
+It stores document chunks as dense vectors and supports cosine similarity search.
+The HTTP API exposes endpoints for batch insert, search, and point retrieval.

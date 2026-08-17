@@ -1,0 +1,7 @@
+Cloudflare Models Used
+
+Embedding model: @cf/qwen/qwen3-embedding-0.6b
+Embedding dimension: 1024
+
+LLM model: @cf/openai/gpt-oss-20b
+Used for answering questions based on retrieved document context.

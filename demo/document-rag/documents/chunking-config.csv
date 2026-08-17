@@ -1,0 +1,5 @@
+setting,value,description
+CHUNK_SIZE,512,Maximum characters per text chunk
+CHUNK_OVERLAP,50,Overlap between consecutive chunks
+TOP_K,5,Number of chunks retrieved per query
+EMBEDDING_BATCH_SIZE,64,Chunks embedded per API request

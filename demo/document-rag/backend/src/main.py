@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -6,166 +6,160 @@ from typing import Dict
 import tempfile
 import os
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from src.config import Config
 from src.extractor import extract_text, SUPPORTED_EXTENSIONS
 from src.chunker import chunk_text
 from src.embedder import Embedder
 from src.generator import Generator
 from src.vectorstore import VectorStore
-
+from pydantic import BaseModel
 
 vector_store: VectorStore = None
+
 embedder: Embedder = None
 generator: Generator = None
+
+
+def get_ip(request: Request) -> str:
+    forwared_request_headers = request.headers.get("X-Forwarded-For")
+    if forwared_request_headers:
+        return forwared_request_headers.split(",")[0].strip()
+    else:
+        return request.client.host or request.headers.get("X-Real-IP")
+
+
+limiter = Limiter(key_func=get_ip)
+
+
+class user_query(BaseModel):
+    query: str
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global vector_store, embedder, generator
-    
-    if not Config.OPENAI_API_KEY or Config.OPENAI_API_KEY == "sk-your-api-key-here":
-        print("Warning: OPENAI_API_KEY not set. Set it in .env file.")
+
+    vector_store = VectorStore(Config.VORTEXDB_HOST, Config.VORTEXDB_PORT)
+    try:
+        vector_store.health_check()
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to connect to VortexDB at "
+            f"{Config.VORTEXDB_HOST}:{Config.VORTEXDB_PORT}: {e}"
+        ) from e
+
+    print(f"Connected to VortexDB at {Config.VORTEXDB_HOST}:{Config.VORTEXDB_PORT}")
+
+    if not Config.OPENAI_API_KEY:
+        print("Warning: OPENAI_API_KEY not set.")
     else:
-        embedder = Embedder(Config.OPENAI_API_KEY)
-        generator = Generator(Config.OPENAI_API_KEY)
-        vector_store = VectorStore(Config.VORTEXDB_HOST, Config.VORTEXDB_PORT)
-        print(f"Connected to VortexDB at {Config.VORTEXDB_HOST}:{Config.VORTEXDB_PORT}")
-    
+        embedder = Embedder()
+        generator = Generator()
+
     yield
 
 
 app = FastAPI(title="Document RAG API", lifespan=lifespan)
-
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
 @app.get("/")
-async def root():
+@limiter.limit("5/minute")
+async def root(request: Request):
+
     return {"status": "ok", "message": "Document RAG API"}
 
 
 @app.get("/health")
-async def health():
+async def health(request: Request):
     if not embedder or not vector_store:
         return JSONResponse(
             status_code=503,
-            content={"status": "error", "message": "Service not ready. Check API key."}
+            content={
+                "status": "error",
+                "message": "Service not ready. Check AI provider config.",
+            },
+        )
+    try:
+        vector_store.health_check()
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": f"VortexDB unreachable: {e}"},
         )
     return {"status": "ok"}
 
 
-@app.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
-    global embedder, vector_store
-    
-    if not embedder or not vector_store:
-        raise HTTPException(status_code=503, detail="Service not ready. Set OPENAI_API_KEY in .env")
-    
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in SUPPORTED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported format: {ext}. Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
-        )
-    
-    if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']:
-        raise HTTPException(
-            status_code=400,
-            detail="Image files are not supported. Please upload a text document (PDF, TXT, MD, DOCX, CSV)."
-        )
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_path = tmp.name
-    
-    try:
-        text = extract_text(tmp_path)
-        
-        if not text or not text.strip():
-            raise HTTPException(status_code=400, detail="Document appears to be empty or no text could be extracted.")
-        
-        chunks = chunk_text(text, Config.CHUNK_SIZE, Config.CHUNK_OVERLAP)
-        
-        if not chunks:
-            raise HTTPException(status_code=400, detail="Could not chunk document")
-        
-        embeddings = embedder.embed(chunks)
-        
-        points_inserted = vector_store.insert_batch(embeddings, chunks, file.filename)
-        
-        return {
-            "success": True,
-            "filename": file.filename,
-            "chunks": points_inserted,
-            "message": f"Document indexed successfully"
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        error_msg = str(e)
-        if "quota" in error_msg.lower() or "429" in error_msg:
-            raise HTTPException(status_code=429, detail="OpenAI API quota exceeded. Please add billing or wait for quota reset.")
-        if "clipboard" in error_msg.lower() or "image" in error_msg.lower():
-            raise HTTPException(status_code=400, detail="This PDF contains images. Please upload a text-based PDF.")
-        raise HTTPException(status_code=500, detail=f"Error processing document: {error_msg}")
-    finally:
-        os.unlink(tmp_path)
-
-
 @app.post("/chat")
-async def chat(question: str = None, body: Dict = None):
+@limiter.limit("2/minute")
+async def chat(request: Request, user_query: user_query):
     global embedder, generator, vector_store
-    
+
     if not embedder or not generator or not vector_store:
-        raise HTTPException(status_code=503, detail="Service not ready. Set OPENAI_API_KEY in .env")
-    
-    if body:
-        question = body.get("question", question)
-    
+        raise HTTPException(
+            status_code=503,
+            detail="Service not ready. Configure OpenAI or Cloudflare AI credentials.",
+        )
+
+    question = user_query.query
+    if len(question) > 10000:
+        raise HTTPException(status_code=400, detail="Question is too long")
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")
-    
+
     query_embedding = embedder.embed_single(question)
-    
+
     results = vector_store.search(query_embedding, Config.TOP_K)
-    
+
     answer = generator.generate(question, results)
-    
+
     return {
         "answer": answer,
         "sources": [
-            {"text": r["text"][:200] + "..." if len(r["text"]) > 200 else r["text"],
-             "filename": r["filename"],
-             "score": round(r["score"], 3)}
+            {
+                "text": r["text"][:200] + "..." if len(r["text"]) > 200 else r["text"],
+            }
             for r in results
-        ]
+        ],
     }
 
 
-@app.delete("/clear")
-async def clear():
-    global vector_store
-    
-    if not vector_store:
-        raise HTTPException(status_code=503, detail="Service not ready")
-    
-    vector_store.clear()
-    return {"success": True, "message": "All documents cleared"}
+@app.post("/query")
+@limiter.limit("2/minute")
+async def query_raw(request: Request, user_query: user_query):
+    global embedder, generator, vector_store
 
+    if not embedder or not generator or not vector_store:
+        raise HTTPException(
+            status_code=503,
+            detail="Service not ready. Configure OpenAI or Cloudflare AI credentials.",
+        )
 
-@app.get("/stats")
-async def stats():
-    global vector_store
-    
-    if not vector_store:
-        return {"points_count": 0}
-    
-    return vector_store.get_info()
+    question = user_query.query
+
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required")
+
+    query_embedding = embedder.embed_single(question)
+
+    results = vector_store.search(query_embedding, Config.TOP_K)
+
+    return {
+        "sources": [
+            {
+                "text": r["text"][:200] + "..." if len(r["text"]) > 200 else r["text"],
+            }
+            for r in results
+        ],
+    }

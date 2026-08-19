@@ -38,6 +38,7 @@ impl VectorDb for VectorDBService {
         request: Request<InsertVectorRequest>,
     ) -> Result<Response<PointId>, Status> {
         log_rpc("insert_vector", self.logging);
+        interceptors::require_write_role(&request)?;
 
         let inner_request = request.into_inner();
 
@@ -157,6 +158,7 @@ impl VectorDb for VectorDBService {
 
     async fn delete_point(&self, request: Request<PointId>) -> Result<Response<()>, Status> {
         log_rpc("delete_point", self.logging);
+        interceptors::require_write_role(&request)?;
 
         let point_id = request.into_inner().id.unwrap_or_default().value;
 
@@ -179,6 +181,7 @@ impl VectorDb for VectorDBService {
         &self,
         request: tonic::Request<InsertVectorsBatchRequest>,
     ) -> Result<tonic::Response<InsertVectorsBatchResponse>, tonic::Status> {
+        interceptors::require_write_role(&request)?;
         let req = request.into_inner();
         let mut ids = Vec::with_capacity(req.vectors.len());
 
@@ -254,11 +257,11 @@ impl VectorDb for VectorDBService {
 pub async fn run_server(
     vector_db_service: VectorDBService,
     endpoint: ServerEndpoint,
-    root_password: String,
+    keys: Arc<defs::ApiKeyStore>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     event!(Level::INFO, "Starting gRPC server at: {:?}", endpoint);
 
-    let auth_interceptor = interceptors::AuthInterceptor::new(root_password);
+    let auth_interceptor = interceptors::AuthInterceptor::new(keys);
 
     let router = Server::builder()
         .layer(InterceptorLayer::new(auth_interceptor))

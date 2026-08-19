@@ -34,7 +34,10 @@ async fn main() -> Result<(), BoxError> {
     let http_handle = if !config.disable_http {
         let db = Arc::clone(&shared_db);
         let addr = config.http_addr;
-        Some(tokio::spawn(async move { run_http_server(db, addr).await }))
+        let keys = Arc::clone(&config.api_keys);
+        Some(tokio::spawn(async move {
+            run_http_server(db, addr, keys).await
+        }))
     } else {
         info!("HTTP server is disabled");
         None
@@ -44,9 +47,9 @@ async fn main() -> Result<(), BoxError> {
     let grpc_handle = {
         let db = Arc::clone(&shared_db);
         let addr = config.grpc_addr;
-        let password = config.grpc_root_password;
+        let keys = Arc::clone(&config.api_keys);
         let logging = config.logging;
-        tokio::spawn(async move { run_grpc_server(db, addr, password, logging).await })
+        tokio::spawn(async move { run_grpc_server(db, addr, keys, logging).await })
     };
 
     if let Some(http) = http_handle {

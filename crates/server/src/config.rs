@@ -1,5 +1,5 @@
 use api::DbConfig;
-use defs::Similarity;
+use defs::{ApiKeyEntry, ApiKeyStore, Similarity};
 use dotenv::dotenv;
 use index::{IndexType, hnsw::HnswConfig, kd_tree::KDTreeConfig};
 use snafu::prelude::*;
@@ -7,6 +7,7 @@ use std::env;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use storage::StorageType;
 use tracing::{Level, event};
 
@@ -23,7 +24,7 @@ const DEFAULT_KD_TREE_DELETE_REBUILD_RATIO: f32 = 0.25;
 pub struct ServerConfig {
     pub http_addr: SocketAddr,
     pub grpc_addr: SocketAddr,
-    pub grpc_root_password: String,
+    pub api_keys: Arc<ApiKeyStore>,
     pub db_config: DbConfig,
     pub logging: bool,
     pub disable_http: bool,
@@ -46,6 +47,27 @@ pub enum ConfigError {
 
     #[snafu(display("Invalid address: {addr}"))]
     InvalidAddress { addr: String },
+
+    #[snafu(display("Failed to read keys file {path}: {source}"))]
+    KeysFileRead {
+        path: String,
+        source: std::io::Error,
+    },
+
+    #[snafu(display("Failed to parse keys file {path}: {source}"))]
+    KeysFileParse {
+        path: String,
+        source: serde_json::Error,
+    },
+
+    #[snafu(display("Keys file {path} contains no keys"))]
+    KeysFileEmpty { path: String },
+
+    #[snafu(display("Keys file {path} contains an entry with an empty key value"))]
+    EmptyApiKey { path: String },
+
+    #[snafu(display("Keys file {path} has two entries with the same key value: {key}"))]
+    DuplicateApiKey { path: String, key: String },
 }
 
 pub type Result<T, E = ConfigError> = std::result::Result<T, E>;
@@ -108,11 +130,11 @@ impl ServerConfig {
                     addr: format!("{}:{}", grpc_host, grpc_port),
                 })?;
 
-        // gRPC root password (required)
-        let grpc_root_password =
-            env::var("GRPC_ROOT_PASSWORD").map_err(|_| ConfigError::MissingRequiredEnvVar {
-                var: "GRPC_ROOT_PASSWORD".to_string(),
+        let keys_file_path =
+            env::var("VORTEXDB_KEYS_FILE").map_err(|_| ConfigError::MissingRequiredEnvVar {
+                var: "VORTEXDB_KEYS_FILE".to_string(),
             })?;
+        let api_keys = Arc::new(load_keys_file(&keys_file_path)?);
 
         // Storage type
         let storage_type_str = env::var("STORAGE_TYPE")
@@ -235,12 +257,51 @@ impl ServerConfig {
         Ok(ServerConfig {
             http_addr,
             grpc_addr,
-            grpc_root_password,
+            api_keys,
             db_config,
             logging,
             disable_http,
         })
     }
+}
+
+#[derive(serde::Deserialize)]
+struct KeysFile {
+    keys: Vec<ApiKeyEntry>,
+}
+
+fn load_keys_file(path: &str) -> Result<ApiKeyStore> {
+    let contents = fs::read_to_string(path).map_err(|source| ConfigError::KeysFileRead {
+        path: path.to_string(),
+        source,
+    })?;
+    let parsed: KeysFile =
+        serde_json::from_str(&contents).map_err(|source| ConfigError::KeysFileParse {
+            path: path.to_string(),
+            source,
+        })?;
+
+    if parsed.keys.is_empty() {
+        return Err(ConfigError::KeysFileEmpty {
+            path: path.to_string(),
+        });
+    }
+
+    if parsed.keys.iter().any(|entry| entry.key.is_empty()) {
+        return Err(ConfigError::EmptyApiKey {
+            path: path.to_string(),
+        });
+    }
+
+    let store = ApiKeyStore::new(parsed.keys);
+    if let Some(key) = store.duplicate_key() {
+        return Err(ConfigError::DuplicateApiKey {
+            path: path.to_string(),
+            key: key.to_string(),
+        });
+    }
+
+    Ok(store)
 }
 
 fn load_usize_env(name: &str, default: usize) -> usize {

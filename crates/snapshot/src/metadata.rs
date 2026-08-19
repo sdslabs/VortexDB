@@ -1,4 +1,4 @@
-use crate::constants::SMALL_ID_LEN;
+use crate::constants::{FILENAME_METADATA_SEPARATOR, SMALL_ID_LEN, SNAPSHOT_FILE_EXTENSION};
 use chrono::DateTime;
 use chrono::Local;
 use defs::DbError;
@@ -17,8 +17,6 @@ pub struct Metadata {
     pub path: PathBuf,
     pub sem_ver: Version,
 }
-
-const FILENAME_METADATA_SEPARATOR: &str = "-x";
 
 impl Metadata {
     pub fn new(id: Uuid, date: SystemTime, path: PathBuf, sem_ver: Version) -> Self {
@@ -41,10 +39,10 @@ impl Metadata {
             .ok_or(DbError::SnapshotError(
                 "Invalid UTF-8 in filename".to_string(),
             ))?
-            .strip_suffix(".tar.gz")
-            .ok_or(DbError::SnapshotError(
-                "Snapshot filename doesnt end with .tar.gz".to_string(),
-            ))?;
+            .strip_suffix(SNAPSHOT_FILE_EXTENSION)
+            .ok_or(DbError::SnapshotError(format!(
+                "Snapshot filename doesnt end with {SNAPSHOT_FILE_EXTENSION}"
+            )))?;
 
         let parts = filename
             .split(FILENAME_METADATA_SEPARATOR)

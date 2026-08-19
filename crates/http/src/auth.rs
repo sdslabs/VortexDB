@@ -9,8 +9,7 @@ use defs::ApiKeyRole;
 use serde_json::json;
 
 use crate::AppState;
-
-const API_KEY_HEADER: &str = "api-key";
+use crate::constants::API_KEY_HEADER;
 
 fn extract_key(req: &Request) -> Option<&str> {
     req.headers().get(API_KEY_HEADER)?.to_str().ok()

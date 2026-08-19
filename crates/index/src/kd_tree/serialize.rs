@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::io::{Cursor, Read, Write};
 
 use super::KD_TREE_MAGIC_BYTES;
+use super::constants::{DELETED_MASK, NODE_MARKER_BYTE, SKIP_MARKER_BYTE};
 use super::index::KDTree;
 use super::types::KDTreeNode;
 use crate::{IndexSnapshot, IndexType, SerializableIndex};
@@ -56,11 +57,6 @@ impl SerializableIndex for KDTree {
         Ok(())
     }
 }
-
-const NODE_MARKER_BYTE: u8 = 1u8;
-const SKIP_MARKER_BYTE: u8 = 0u8;
-
-const DELETED_MASK: u8 = 2u8;
 
 impl KDTree {
     pub fn deserialize(

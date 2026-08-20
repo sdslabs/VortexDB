@@ -1,6 +1,0 @@
-{
-  "keys": [
-    { "name": "admin", "role": "readwrite", "key": "replace-with-a-random-secret" },
-    { "name": "search-service", "role": "readonly", "key": "replace-with-a-different-random-secret" }
-  ]
-}

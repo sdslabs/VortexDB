@@ -1,5 +1,4 @@
 mod app;
-mod constants;
 mod ui;
 
 use app::App;
@@ -16,7 +15,7 @@ use ui::{
     vector_operations::render_vector_operations,
 };
 
-use constants::POLL_DURATION;
+const POLL_DURATION: std::time::Duration = std::time::Duration::from_millis(50);
 
 fn main() -> Result<()> {
     color_eyre::install()?;

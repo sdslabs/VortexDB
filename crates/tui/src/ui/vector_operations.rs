@@ -8,7 +8,14 @@ use ratatui::{
 
 use super::components::{OperationsList, PageTitle, common_instructions, create_instructions};
 use crate::app::App;
-use crate::constants::VECTOR_OPERATIONS;
+
+const VECTOR_OPERATIONS: &[&str] = &[
+    "List All Vectors",
+    "Delete Vector",
+    "Search Similar Vectors",
+    "Insert Text Embedding",
+    "Insert Image Embedding",
+];
 
 fn get_vector_items() -> Vec<ListItem<'static>> {
     VECTOR_OPERATIONS

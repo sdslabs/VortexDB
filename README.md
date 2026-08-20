@@ -67,22 +67,11 @@ cp .env.example .env
 ```
 
 The following env vars are important, and are required to be set by the user:  
-`VORTEXDB_KEYS_FILE`  
+`GRPC_ROOT_PASSWORD`  
 `DIMENSION`  
 `DATA_PATH`  
 
 **NOTE**: `DATA_PATH` is the directory within the container where persistent data is stored
-
-**NOTE**: `VORTEXDB_KEYS_FILE` points to a JSON file of API keys shared by both the HTTP and gRPC servers, e.g.:
-```json
-{
-  "keys": [
-    { "name": "admin", "role": "readwrite", "key": "some-random-secret" },
-    { "name": "search-service", "role": "readonly", "key": "another-random-secret" }
-  ]
-}
-```
-Requests authenticate with an `api-key: <key>` header over HTTP, or an `authorization: Bearer <key>` header over gRPC. `readonly` keys can read/search but not insert, batch-insert, or delete; `readwrite` keys can do all of the above. See `keys.example.json`.
 
 
 Setting of the following env vars is optional, as they fallback to safe defaults, but recommended:  

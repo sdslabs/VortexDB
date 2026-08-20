@@ -1,7 +1,0 @@
-RAG API Endpoints
-
-GET /health - checks VortexDB and AI provider readiness
-POST /chat - accepts {"query": "..."} and returns an answer with source snippets
-POST /query - returns raw retrieval sources without LLM generation
-
-The chat endpoint embeds the user question, searches VortexDB for top-k similar chunks, then calls the LLM with that context.

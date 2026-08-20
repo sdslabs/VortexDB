@@ -15,17 +15,13 @@ use utils::ServerEndpoint;
 pub async fn run_grpc_server(
     db: Arc<VectorDb>,
     addr: SocketAddr,
-    root_password: String,
+    keys: Arc<defs::ApiKeyStore>,
     logging: bool,
 ) -> Result<(), BoxError> {
     let vector_db_service = VectorDBService::new(db, logging);
-    run_server(
-        vector_db_service,
-        ServerEndpoint::Address(addr),
-        root_password,
-    )
-    .await
-    .map_err(|e| -> BoxError { e.to_string().into() })
+    run_server(vector_db_service, ServerEndpoint::Address(addr), keys)
+        .await
+        .map_err(|e| -> BoxError { e.to_string().into() })
 }
 
 #[cfg(test)]

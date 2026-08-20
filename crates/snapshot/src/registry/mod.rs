@@ -7,8 +7,7 @@ use crate::{VectorDbRestore, metadata::Metadata};
 
 pub type SnapshotMetaPage = Vec<Metadata>;
 
-pub const INFINITY_LIMIT: usize = 100000;
-pub const NO_OFFSET: usize = 0;
+pub use constants::{INFINITY_LIMIT, NO_OFFSET};
 
 pub trait SnapshotRegistry: Send + Sync {
     fn add_snapshot(&mut self, snapshot_path: &Path) -> Result<Metadata, DbError>;

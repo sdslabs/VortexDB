@@ -1,12 +1,10 @@
 use super::{App, AppState, ModalType, VectorListItem};
+use crate::constants::VECTOR_LIST_LIMIT;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use defs::{ContentType, Payload, SearchQueryInput, Similarity};
 use std::io;
 use std::path::PathBuf;
 use uuid::Uuid;
-
-// Set how many vectors to fetch per function call in list_vectors
-const VECTOR_LIST_LIMIT: usize = 50;
 
 pub fn handle_event(app: &mut App, event: Event) -> io::Result<()> {
     if let Event::Key(key) = event {

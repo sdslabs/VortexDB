@@ -1,3 +1,4 @@
+use crate::constants::{ENV_IMAGE_EMBEDDING_URL, ENV_TEXT_EMBEDDING_URL};
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, Response, multipart};
 use serde::Deserialize;
@@ -61,8 +62,8 @@ impl EmbeddingClient {
             .timeout(Duration::from_secs(15))
             .build()
             .unwrap_or_else(|_| Client::new());
-        let text_url = env::var("TEXT_EMBEDDING_URL").expect("TEXT_EMBEDDING_URL must be set");
-        let image_url = env::var("IMAGE_EMBEDDING_URL").expect("IMAGE_EMBEDDING_URL must be set");
+        let text_url = env::var(ENV_TEXT_EMBEDDING_URL).expect("TEXT_EMBEDDING_URL must be set");
+        let image_url = env::var(ENV_IMAGE_EMBEDDING_URL).expect("IMAGE_EMBEDDING_URL must be set");
 
         Self {
             client,

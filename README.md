@@ -4,12 +4,25 @@
 
 <p align="center">
   <a href="https://github.com/sdslabs/VortexDB/actions"><img src="https://img.shields.io/github/actions/workflow/status/sdslabs/VortexDB/rust.yml?branch=refactor&style=flat-square&label=build" alt="Build Status"></a>
-  <a href="#"><img src="https://img.shields.io/badge/docs-coming%20soon-yellow?style=flat-square" alt="Docs"></a>
+  <a href="https://vortex-db.sdslabs.co/"><img src="https://img.shields.io/badge/docs-vortex--db.sdslabs.co-00d4aa?style=flat-square" alt="Docs"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License"></a>
   <a href="https://discord.gg/dXkVEgTPu9"><img src="https://img.shields.io/discord/758961084337618944?style=flat-square&logo=discord&label=discord" alt="Discord"></a>
 </p>
 
 **VortexDB** - A vector database built from scratch in Rust 🦀. VortexDB is designed for efficient similarity search and can be used as the backbone for AI-powered applications.
+
+---
+
+## Documentation
+
+Full documentation lives at **[vortex-db.sdslabs.co](https://vortex-db.sdslabs.co/)**:
+
+- [Installation](https://vortex-db.sdslabs.co/getting-started/installation) and [Quickstart](https://vortex-db.sdslabs.co/getting-started/quickstart)
+- Concepts: [Architecture](https://vortex-db.sdslabs.co/concepts/architecture), [Indexers](https://vortex-db.sdslabs.co/concepts/indexers), [Snapshots](https://vortex-db.sdslabs.co/concepts/snapshots)
+- API reference: [overview](https://vortex-db.sdslabs.co/api-reference/overview), [HTTP](https://vortex-db.sdslabs.co/api-reference/http), [gRPC](https://vortex-db.sdslabs.co/api-reference/grpc)
+- Python SDK: [reference](https://vortex-db.sdslabs.co/sdk/reference) and [examples](https://vortex-db.sdslabs.co/sdk/examples)
+
+The sources for the site are in [`docs/`](docs).
 
 ---
 
@@ -25,7 +38,7 @@ Supported distance metrics include Euclidean, Manhattan, Hamming, and Cosine sim
 
 ### Storage Engine
 
-The storage layer abstracts persistence with a `StorageEngine` trait, allowing different backends. **RocksDB** offers persistent, production-ready storage for real-world deployments.
+The storage layer abstracts persistence with a `StorageEngine` trait, allowing different backends. **RocksDB** offers persistent, production-ready storage for real-world deployments, while **InMemory** keeps points in process for tests and ephemeral workloads.
 
 
 
@@ -119,10 +132,11 @@ DISABLE_HTTP=true docker compose up
 
 ## Roadmap
 
-- [ ] InMemory implementation of StorageEngine
-- [ ] Snapshots for indexers
+- [x] InMemory implementation of StorageEngine
+- [x] Snapshots for indexers
+- [x] Python SDK — sync and async clients ([`client/python`](client/python))
+- [x] API key authentication for the HTTP and gRPC servers
 - [ ] Benchmarking suite
-- [ ] Python SDK
 - [ ] JavaScript/TypeScript SDK
 - [ ] Modular vectorization service
 

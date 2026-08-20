@@ -20,7 +20,7 @@ services:
       DISABLE_HTTP: ${DISABLE_HTTP:-false}
 
       # Required
-      GRPC_ROOT_PASSWORD: ${GRPC_ROOT_PASSWORD}
+      VORTEXDB_KEYS_FILE: /run/secrets/keys.json
       DIMENSION: ${DIMENSION}
 
       DATA_PATH: /data
@@ -31,6 +31,7 @@ services:
 
     volumes:
       - vortexdb_data:/data
+      - ./keys.json:/run/secrets/keys.json:ro
 
 volumes:
   vortexdb_data:

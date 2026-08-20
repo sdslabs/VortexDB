@@ -28,7 +28,7 @@ All gRPC calls require the `authorization` header with your API key:
 -H "authorization: your-api-key"
 ```
 
-The API key is set via the `GRPC_ROOT_PASSWORD` environment variable.
+Valid keys come from the JSON file pointed to by the `VORTEXDB_KEYS_FILE` environment variable, shared with the HTTP server. `readonly` keys can call `GetPoint`, `SearchPoints`, and `SearchPointsBatch`; `readwrite` keys can additionally call `InsertVector`, `InsertVectorsBatch`, and `DeletePoint`. A `readonly` key calling a write RPC gets a `PERMISSION_DENIED` status.
 
 ---
 

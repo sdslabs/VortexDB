@@ -1,7 +1,9 @@
+pub mod auth;
 pub mod error;
 pub mod types;
 
 // Without re-exports, users would need to write defs::types::SomeType instead of just defs::SomeType. Re-exports simplify the API by flattening the module hierarchy. The * means "everything public" from that module.
+pub use auth::*;
 pub use error::*;
 use std::path::{Path, PathBuf};
 pub use types::*;

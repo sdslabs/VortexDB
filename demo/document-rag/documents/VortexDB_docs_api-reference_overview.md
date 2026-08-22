@@ -1,0 +1,180 @@
+---
+title: "API Overview"
+description: "VortexDB exposes two APIs: gRPC and HTTP"
+---
+
+# API Overview
+
+VortexDB provides two complementary APIs for different use cases:
+
+## Available APIs
+
+<CardGroup cols={2}>
+  <Card title="gRPC API" icon="bolt" href="/api-reference/grpc">
+    High-performance Protocol Buffer interface for production workloads
+  </Card>
+  <Card title="HTTP API" icon="globe" href="/api-reference/http">
+    RESTful JSON interface for quick testing and prototyping
+  </Card>
+</CardGroup>
+
+## Comparison
+
+| Feature | gRPC | HTTP |
+|---------|------|------|
+| **Protocol** | HTTP/2 + Protobuf | HTTP/1.1 + JSON |
+| **Default Port** | 50051 | 3000 |
+| **Authentication** | API key required | API key required |
+| **Performance** | Higher throughput | Lower latency for simple requests |
+| **Client Libraries** | Auto-generated | Any HTTP client |
+| **Best For** | Production, SDKs | Debugging, curl |
+
+## Authentication
+
+### gRPC
+
+The gRPC API requires authentication via the `authorization` header:
+
+```bash
+# Using grpcurl
+grpcurl -plaintext \
+  -H "authorization: your-api-key" \
+  localhost:50051 vectordb.VectorDB/GetPoint
+```
+
+```python
+# Python SDK
+db = VortexDB(
+    grpc_url="localhost:50051",
+    api_key="your-api-key"
+)
+```
+
+### HTTP
+
+The HTTP API requires an `api-key` header on every request under `/points`. `/` and `/health` remain open for health checks.
+
+```bash
+curl -X POST "http://localhost:3000/points/search" \
+  -H "api-key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"vector": [0.1, 0.2, 0.3], "similarity": "Cosine", "limit": 5}'
+```
+
+Keys come from the same `VORTEXDB_KEYS_FILE` used by gRPC (see [gRPC API](/api-reference/grpc)), but the HTTP API additionally enforces each key's role: `readonly` keys can fetch and search points; `readwrite` keys can also insert, batch-insert, and delete. A `readonly` key used against a write route gets `403 Forbidden`; a missing or unrecognized key gets `401 Unauthorized`.
+
+## Common Operations
+
+Both APIs support the same core operations:
+
+| Operation | gRPC Method | HTTP Endpoint |
+|-----------|-------------|---------------|
+| Insert vector | `InsertVector` | `POST /points` |
+| Batch insert | `InsertVectorsBatch` | `POST /points/batch` |
+| Get point | `GetPoint` | `GET /points/:id` |
+| Delete point | `DeletePoint` | `DELETE /points/:id` |
+| Search vectors | `SearchPoints` | `POST /points/search` |
+| Batch search | `SearchPointsBatch` | `POST /points/search/batch` |
+| Health check | - | `GET /health` |
+
+## Error Handling
+
+### gRPC Error Codes
+
+| Code | Name | Description |
+|------|------|-------------|
+| `0` | OK | Success |
+| `3` | INVALID_ARGUMENT | Invalid request parameters |
+| `5` | NOT_FOUND | Point not found |
+| `13` | INTERNAL | Server error |
+| `16` | UNAUTHENTICATED | Invalid or missing API key |
+
+### HTTP Status Codes
+
+| Code | Description |
+|------|-------------|
+| `200` | Success |
+| `201` | Created (for insert) |
+| `204` | No Content (for delete) |
+| `400` | Bad Request |
+| `404` | Not Found |
+| `500` | Internal Server Error |
+
+## Data Types
+
+### Vector
+
+A dense vector of floating-point values:
+
+<Tabs>
+  <Tab title="gRPC (Protobuf)">
+    ```protobuf
+    message DenseVector {
+      repeated float values = 1;
+    }
+    ```
+  </Tab>
+  <Tab title="HTTP (JSON)">
+    ```json
+    {
+      "vector": [0.1, 0.2, 0.3, 0.4]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Payload
+
+Metadata attached to vectors:
+
+<Tabs>
+  <Tab title="gRPC (Protobuf)">
+    ```protobuf
+    enum ContentType {
+      Image = 0;
+      Text = 1;
+    }
+    
+    message Payload {
+      ContentType content_type = 1;
+      string content = 2;
+    }
+    ```
+  </Tab>
+  <Tab title="HTTP (JSON)">
+    ```json
+    {
+      "payload": {
+        "content_type": "Text",
+        "content": "Hello, world!"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Similarity Metric
+
+Distance function for search:
+
+| Value | gRPC Enum | HTTP String |
+|-------|-----------|-------------|
+| Euclidean (L2) | `0` | `"Euclidean"` |
+| Manhattan (L1) | `1` | `"Manhattan"` |
+| Hamming | `2` | `"Hamming"` |
+| Cosine | `3` | `"Cosine"` |
+
+## Rate Limiting
+
+VortexDB does not implement built-in rate limiting. For production deployments, use a reverse proxy or API gateway to enforce limits.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="gRPC Reference" icon="bolt" href="/api-reference/grpc">
+    Complete gRPC API documentation
+  </Card>
+  <Card title="HTTP Reference" icon="globe" href="/api-reference/http">
+    Complete HTTP API documentation
+  </Card>
+</CardGroup>

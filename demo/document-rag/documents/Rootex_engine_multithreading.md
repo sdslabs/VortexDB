@@ -1,0 +1,10 @@
+<!-- Source: https://rootex.readthedocs.io/en/latest/engine/multithreading.html -->
+
+Multithreading — Rootex documentation
+- Multithreading
+# Multithreading
+Rootex engine is multithreading ready, however its main focus is on single threaded operations.
+Every Rootex application ([Class Application](https://rootex.readthedocs.io/en/latest/api/class_application.html#class-application)) has a pool of threads, called simply a threadpool in common CS language. These threads can be assigned work either by the engine or game code.
+Rootex uses the concept of Worker threads, a.k.a. Job Based multithreading.
+At startup, Rootex’ threadpool manager ([Class ThreadPool](https://rootex.readthedocs.io/en/latest/api/class_thread_pool.html#class-threadpool)) queries the CPU and returns the number of logical CPU cores in the system. The threadpool allocates the same number of threads and uses one of them to be the master thread that distributes “jobs” to different threads. Jobs are implemented as simple overriden virtual functions of [Class Task](https://rootex.readthedocs.io/en/latest/api/class_task.html#class-task).
+During testing Rootex was run simply as a single threaded engine. As time went on, certain functions of Rootex were run in separate threads in a controlled multithreading environment.

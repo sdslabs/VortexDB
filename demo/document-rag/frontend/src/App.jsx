@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import './App.css';
 import { chat, getHealth } from './api';
 
@@ -270,7 +272,22 @@ function App() {
                 )}
               </div>
               <div className="message-content">
-                <div className="message-text">{msg.content}</div>
+                <div className="message-text">
+                  {msg.role === 'assistant' ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ node, ...props }) => (
+                          <a {...props} target="_blank" rel="noopener noreferrer" />
+                        ),
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  ) : (
+                    msg.content
+                  )}
+                </div>
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="sources">
                     <h4>Sources:</h4>

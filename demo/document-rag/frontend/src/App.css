@@ -303,6 +303,7 @@ body {
   background: var(--user-bubble);
   color: white;
   border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
 }
 
 .message-assistant .message-text {
@@ -312,10 +313,154 @@ body {
   border-bottom-left-radius: 4px;
 }
 
+.message-assistant .message-text p {
+  margin-bottom: 0.75em;
+}
+
+.message-assistant .message-text p:last-child {
+  margin-bottom: 0;
+}
+
+.message-assistant .message-text h1,
+.message-assistant .message-text h2,
+.message-assistant .message-text h3,
+.message-assistant .message-text h4,
+.message-assistant .message-text h5,
+.message-assistant .message-text h6 {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+
+.message-assistant .message-text h1:first-child,
+.message-assistant .message-text h2:first-child,
+.message-assistant .message-text h3:first-child,
+.message-assistant .message-text h4:first-child {
+  margin-top: 0;
+}
+
+.message-assistant .message-text h1 { font-size: 1.4em; }
+.message-assistant .message-text h2 { font-size: 1.25em; }
+.message-assistant .message-text h3 { font-size: 1.1em; }
+.message-assistant .message-text h4 { font-size: 1em; }
+
+.message-assistant .message-text ul,
+.message-assistant .message-text ol {
+  padding-left: 24px;
+  margin-top: 0.5em;
+  margin-bottom: 0.75em;
+}
+
+.message-assistant .message-text ul {
+  list-style-type: disc;
+}
+
+.message-assistant .message-text ol {
+  list-style-type: decimal;
+}
+
+.message-assistant .message-text li {
+  margin-bottom: 0.25em;
+}
+
+.message-assistant .message-text li:last-child {
+  margin-bottom: 0;
+}
+
+.message-assistant .message-text li > ul,
+.message-assistant .message-text li > ol {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+
+.message-assistant .message-text code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  color: #e2e8f0;
+}
+
+.message-assistant .message-text pre {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0.75em 0;
+  overflow-x: auto;
+}
+
+.message-assistant .message-text pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: inherit;
+}
+
+.message-assistant .message-text blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  margin: 0.75em 0;
+  color: var(--text-secondary);
+}
+
+.message-assistant .message-text table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 13px;
+  display: block;
+  overflow-x: auto;
+}
+
+.message-assistant .message-text th,
+.message-assistant .message-text td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.message-assistant .message-text th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.message-assistant .message-text tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.message-assistant .message-text a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.message-assistant .message-text a:hover {
+  color: var(--accent-hover);
+}
+
+.message-assistant .message-text hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 1em 0;
+}
+
+.message-assistant .message-text strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .message-error .message-text {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: var(--error);
+  white-space: pre-wrap;
 }
 
 .sources {

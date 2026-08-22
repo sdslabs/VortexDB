@@ -1,0 +1,55 @@
+name: Publish Python Client
+
+on:
+  push:
+    tags:
+      - "python-v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. python-v0.2.0) — must already exist"
+        required: true
+
+defaults:
+  run:
+    working-directory: client/python
+
+jobs:
+  publish:
+    name: Build and Publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve tag and version
+        id: version
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="${tag#python-v}"
+          pkg_version=$(awk -F'"' '/^version *=/ {print $2; exit}' pyproject.toml)
+          if [ "$version" != "$pkg_version" ]; then
+            echo "Tag $tag does not match pyproject.toml version $pkg_version" >&2
+            exit 1
+          fi
+
+      - name: Set Up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: client/python/dist

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vortexdb"
-version = "0.1.5"
+version = "0.1.0"
 description = "Python client for VortexDB"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,7 @@ dependencies = [
 dev = [
     "grpcio-tools>=1.81.1,<2.0.0",
     "pytest>=7.0",
+    "ruff==0.15.17",
 ]
 
 [tool.hatch.build.targets.wheel]

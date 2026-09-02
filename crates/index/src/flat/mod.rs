@@ -1,8 +1,9 @@
-pub mod constants;
+use defs::Magic;
+
 pub mod index;
 mod serialize;
 
 #[cfg(test)]
 mod tests;
 
-pub use constants::FLAT_MAGIC_BYTES;
+pub const FLAT_MAGIC_BYTES: Magic = [0x00, 0x00, 0x00, 0x01];

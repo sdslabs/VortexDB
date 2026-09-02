@@ -6,7 +6,7 @@ use crate::service::vectordb::{
 use crate::service::{VectorDBService, run_server};
 use crate::utils::ServerEndpoint;
 use api::DbConfig;
-use defs::{ApiKeyEntry, ApiKeyRole, ApiKeyStore, Similarity};
+use defs::Similarity;
 use index::{IndexType, hnsw::HnswConfig, kd_tree::KDTreeConfig};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -17,7 +17,6 @@ use tonic::transport::Channel;
 // Inspired from https://github.com/hyperium/tonic/discussions/924#discussioncomment-9854088
 
 const TEST_AUTH_BEARER_TOKEN: &str = "123";
-const TEST_READONLY_BEARER_TOKEN: &str = "456";
 
 fn append_test_auth_header<T>(request: &mut tonic::Request<T>, token: &str) {
     let auth_value = format!("Bearer {}", token);
@@ -42,28 +41,19 @@ async fn start_test_server() -> Result<(SocketAddr, TempDir), Box<dyn std::error
 
     let vector_db_api = api::init_api(db_config)?;
 
-    let keys = Arc::new(ApiKeyStore::new(vec![
-        ApiKeyEntry {
-            name: "test".to_string(),
-            role: ApiKeyRole::ReadWrite,
-            key: TEST_AUTH_BEARER_TOKEN.to_string(),
-        },
-        ApiKeyEntry {
-            name: "test-readonly".to_string(),
-            role: ApiKeyRole::ReadOnly,
-            key: TEST_READONLY_BEARER_TOKEN.to_string(),
-        },
-    ]));
-
     let vector_db_service = VectorDBService::new(Arc::new(vector_db_api), false);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let listener_addr = listener.local_addr()?;
 
     tokio::spawn(async move {
-        let _ = run_server(vector_db_service, ServerEndpoint::Listener(listener), keys)
-            .await
-            .inspect_err(|err| panic!("Could not start test server : {:?}", err));
+        let _ = run_server(
+            vector_db_service,
+            ServerEndpoint::Listener(listener),
+            TEST_AUTH_BEARER_TOKEN.to_string(),
+        )
+        .await
+        .inspect_err(|err| panic!("Could not start test server : {:?}", err));
     });
 
     Ok((listener_addr, temp_dir))
@@ -263,42 +253,4 @@ async fn test_unauthorized_rpc() {
 
     // request must fail
     assert!(resp.is_err());
-}
-
-#[tokio::test]
-async fn test_readonly_key_cannot_write() {
-    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
-    let mut client = create_test_client(server_addr).await.unwrap();
-
-    let mut request = tonic::Request::new(InsertVectorRequest {
-        vector: Some(DenseVector {
-            values: vec![1.0, 2.0, 3.0],
-        }),
-        payload: Some(Payload::default()),
-    });
-    append_test_auth_header(&mut request, TEST_READONLY_BEARER_TOKEN);
-
-    let resp = client.insert_vector(request).await;
-
-    assert_eq!(resp.unwrap_err().code(), tonic::Code::PermissionDenied);
-}
-
-#[tokio::test]
-async fn test_readonly_key_can_search() {
-    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
-    let mut client = create_test_client(server_addr).await.unwrap();
-
-    let mut request = tonic::Request::new(SearchRequest {
-        query_vector: Some(DenseVector {
-            values: vec![1.0, 2.0, 3.0],
-        }),
-        similarity: 0,
-        limit: 1,
-        ef: 0,
-    });
-    append_test_auth_header(&mut request, TEST_READONLY_BEARER_TOKEN);
-
-    let resp = client.search_points(request).await;
-
-    assert!(resp.is_ok());
 }

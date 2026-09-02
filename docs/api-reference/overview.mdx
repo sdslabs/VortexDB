@@ -24,7 +24,7 @@ VortexDB provides two complementary APIs for different use cases:
 |---------|------|------|
 | **Protocol** | HTTP/2 + Protobuf | HTTP/1.1 + JSON |
 | **Default Port** | 50051 | 3000 |
-| **Authentication** | API key required | API key required |
+| **Authentication** | API key required | None |
 | **Performance** | Higher throughput | Lower latency for simple requests |
 | **Client Libraries** | Auto-generated | Any HTTP client |
 | **Best For** | Production, SDKs | Debugging, curl |
@@ -52,16 +52,11 @@ db = VortexDB(
 
 ### HTTP
 
-The HTTP API requires an `api-key` header on every request under `/points`. `/` and `/health` remain open for health checks.
+The HTTP API does not require authentication by default. It's designed for trusted internal networks and development.
 
-```bash
-curl -X POST "http://localhost:3000/points/search" \
-  -H "api-key: your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"vector": [0.1, 0.2, 0.3], "similarity": "Cosine", "limit": 5}'
-```
-
-Keys come from the same `VORTEXDB_KEYS_FILE` used by gRPC (see [gRPC API](/api-reference/grpc)), but the HTTP API additionally enforces each key's role: `readonly` keys can fetch and search points; `readwrite` keys can also insert, batch-insert, and delete. A `readonly` key used against a write route gets `403 Forbidden`; a missing or unrecognized key gets `401 Unauthorized`.
+<Warning>
+In production, always deploy the HTTP API behind a reverse proxy with authentication, or disable it entirely using `DISABLE_HTTP=true`.
+</Warning>
 
 ## Common Operations
 

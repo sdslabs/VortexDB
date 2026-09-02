@@ -6,7 +6,7 @@ pub mod registry;
 mod util;
 
 use crate::{
-    constants::{MANIFEST_FILE, SNAPSHOT_FILE_EXTENSION, SNAPSHOT_PARSER_VER},
+    constants::{MANIFEST_FILE, SNAPSHOT_PARSER_VER},
     manifest::Manifest,
     util::{compress_archive, save_index_metadata, save_topology},
 };
@@ -131,14 +131,13 @@ impl Snapshot {
             .map_err(|e| DbError::SnapshotError(e.to_string()))?;
 
         let tar_filename = format!(
-            "{}{}",
+            "{}.tar.gz",
             metadata::Metadata::new(
                 self.id,
                 self.date,
                 index_metadata_path.clone(),
                 constants::SNAPSHOT_PARSER_VER
-            ),
-            SNAPSHOT_FILE_EXTENSION
+            )
         );
         let tar_gz_path = dir_path.join(tar_filename);
 

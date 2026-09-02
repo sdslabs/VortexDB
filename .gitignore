@@ -7,7 +7,6 @@
 .TODO
 /databases
 .env
-/keys.json
 __pycache__/
 build/
 .venv/

@@ -1,4 +1,0 @@
-pub const INMEMORY_CHECKPOINT_FILENAME_MARKER: &str = "inmemory";
-pub const INMEMORY_CHECKPOINT_EXTENSION: &str = "bin";
-pub const INMEMORY_CHECKPOINT_MAGIC: &[u8; 8] = b"VDBIMCP\0";
-pub const INMEMORY_CHECKPOINT_VERSION: u16 = 1;

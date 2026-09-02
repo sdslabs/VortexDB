@@ -1,0 +1,50 @@
+<!-- Source: https://rootex.readthedocs.io/en/latest/guides/getting_started.html -->
+
+Getting Started — Rootex documentation
+- Getting Started
+# Getting Started
+Rootex is a pure Entity-Component-System architectured game engine. We use terms like scenes, entities, components and systems analogous to the domain of Scene trees and ECS architecture. Find more information about these [here](https://en.wikipedia.org/wiki/Entity_component_system)
+Note
+This also means that the Rootex Editor is made with the Rootex Engine itself.
+Rootex Editor is structured to work like popular game engines with its simplistic user interface.
+Any user coming from ECS based game engines should be able to pick up the interface quickly.
+- [Rootex Editor](https://rootex.readthedocs.io/en/latest/guides/running_the_editor.html)
+- [Running the Editor](https://rootex.readthedocs.io/en/latest/guides/running_the_editor.html#running-the-editor)
+- [Editor Layout](https://rootex.readthedocs.io/en/latest/guides/editor_layout.html)
+- [Toolbar Dock](https://rootex.readthedocs.io/en/latest/guides/editor_layout.html#toolbar-dock)
+- [Output Dock](https://rootex.readthedocs.io/en/latest/guides/editor_layout.html#output-dock)
+- [Viewport Dock](https://rootex.readthedocs.io/en/latest/guides/editor_layout.html#viewport-dock)
+- [Scene Dock](https://rootex.readthedocs.io/en/latest/guides/editor_layout.html#scene-dock)
+- [Inspector Dock](https://rootex.readthedocs.io/en/latest/guides/editor_layout.html#inspector-dock)
+- [Content Browser Dock](https://rootex.readthedocs.io/en/latest/guides/editor_layout.html#content-browser-dock)
+- [Animating Objects using TransformAnimationComponent](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html)
+- [Setting up](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html#setting-up)
+- [Interface](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html#interface)
+- [Keyframes](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html#keyframes)
+- [Transition Type Examples](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html#transition-type-examples)
+- [Animation Mode Examples](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html#animation-mode-examples)
+- [Reset](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html#reset)
+- [Play in Editor](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html#play-in-editor)
+- [Play on Start](https://rootex.readthedocs.io/en/latest/guides/using_TransformAnimationComponent.html#play-on-start)
+- [Exploring the Graphical capabilities of Rootex](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html)
+- [Create a scene](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#create-a-scene)
+- [Create Empty scene](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#create-empty-scene)
+- [Giving Components](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#giving-components)
+- [Light Component](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#light-component)
+- [Editor Camera](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#editor-camera)
+- [Point Light](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#point-light)
+- [Overriding a material](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#overriding-a-material)
+- [Custom Material](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#custom-material)
+- [Adding a shader](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#adding-a-shader)
+- [Decal Component](https://rootex.readthedocs.io/en/latest/guides/graphics_tutorial.html#decal-component)
+- [Making HUD using UI-component](https://rootex.readthedocs.io/en/latest/guides/making_HUD_using_ui-component.html)
+- [RmlUi](https://rootex.readthedocs.io/en/latest/guides/making_HUD_using_ui-component.html#rmlui)
+- [Basic HUD](https://rootex.readthedocs.io/en/latest/guides/making_HUD_using_ui-component.html#basic-hud)
+- [Fade-In effect](https://rootex.readthedocs.io/en/latest/guides/making_HUD_using_ui-component.html#fade-in-effect)
+- [Making effects using ParticleEffectComponent](https://rootex.readthedocs.io/en/latest/guides/effects_using_ParticleEffectComponent.html)
+- [Effekseer](https://rootex.readthedocs.io/en/latest/guides/effects_using_ParticleEffectComponent.html#effekseer)
+- [Using the Effekseer exports (Demo)](https://rootex.readthedocs.io/en/latest/guides/effects_using_ParticleEffectComponent.html#using-the-effekseer-exports-demo)
+- [Start Frame](https://rootex.readthedocs.io/en/latest/guides/effects_using_ParticleEffectComponent.html#start-frame)
+- [Moving](https://rootex.readthedocs.io/en/latest/guides/effects_using_ParticleEffectComponent.html#moving)
+- [Use Speed](https://rootex.readthedocs.io/en/latest/guides/effects_using_ParticleEffectComponent.html#use-speed)
+- [Getting Help](https://rootex.readthedocs.io/en/latest/guides/getting_help.html)

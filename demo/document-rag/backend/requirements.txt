@@ -1,0 +1,9 @@
+fastapi==0.124.4
+uvicorn[standard]==0.41.0
+httpx==0.28.1
+openai==2.30.0
+python-dotenv==1.0.1
+slowapi==0.1.10
+python-multipart==0.0.22
+PyPDF2==3.0.1
+python-docx==1.1.2

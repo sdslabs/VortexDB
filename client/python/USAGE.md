@@ -18,7 +18,7 @@ pip install -e .
 The client communicates with VortexDB over gRPC and requires:
 
 - gRPC endpoint (host:port)
-- API key (must match a `key` entry in the server's `VORTEXDB_KEYS_FILE`)
+- API key (maps to `GRPC_ROOT_PASSWORD` on the server)
 
 These can be provided either:
 

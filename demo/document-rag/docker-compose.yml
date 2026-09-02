@@ -1,0 +1,77 @@
+services:
+  vortexdb:
+    build: ../../
+    image: vortexdb:latest
+    container_name: vortexdb
+    environment:
+      HTTP_HOST: "0.0.0.0"
+      HTTP_PORT: "3000"
+      STORAGE_TYPE: rocksdb
+      INDEX_TYPE: hnsw
+      DIMENSION: 1024
+      SIMILARITY: cosine
+      LOGGING: "true"
+      GRPC_ROOT_PASSWORD: vortexdb-secret
+      DISABLE_HTTP: "false"
+    ports:
+      - "3034:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/3000'"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  ingest:
+    build: ./backend
+    env_file:
+      - .env
+    environment:
+      VORTEXDB_HOST: vortexdb
+      VORTEXDB_PORT: "3000"
+      DOCS_DIRECTORY: /app/documents
+    volumes:
+      - ./documents:/app/documents:ro
+    depends_on:
+      vortexdb:
+        condition: service_healthy
+    command: python -m src.ingestion
+    restart: "no"
+
+  backend:
+    build: ./backend
+    env_file:
+      - .env
+    environment:
+      VORTEXDB_HOST: vortexdb
+      VORTEXDB_PORT: "3000"
+      DOCS_DIRECTORY: /app/documents
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./documents:/app/documents:ro
+    depends_on:
+      vortexdb:
+        condition: service_healthy
+      ingest:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3035:80"
+    depends_on:
+      backend:
+        condition: service_healthy

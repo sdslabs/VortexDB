@@ -8,35 +8,50 @@ message UUID {
   string value = 1;
 }
 
+message CollectionID {
+  string name = 1;
+}
+
 service VectorDB {
   //Insert a vector with a payload and return the assigned PointID
   rpc InsertVector(InsertVectorRequest) returns (PointID) {}
 
-  //Delete a vector by its PointID
-  rpc DeletePoint(PointID) returns (google.protobuf.Empty) {}
+  //Delete a vector by its PointID and CollectionID
+  rpc DeletePoint(PointReference) returns (google.protobuf.Empty) {}
 
-  //Get a vector and its payload by PointID
-  rpc GetPoint(PointID) returns (Point) {}
+  //Get a vector and its payload by PointID and CollectionID
+  rpc GetPoint(PointReference) returns (Point) {}
 
   //Search for the k nearest vectors to a target vector given a distance function
   rpc SearchPoints(SearchRequest) returns (SearchResponse) {}
 
   rpc InsertVectorsBatch(InsertVectorsBatchRequest) returns (InsertVectorsBatchResponse) {}
-rpc SearchPointsBatch(SearchPointsBatchRequest) returns (SearchPointsBatchResponse) {}
+  rpc SearchPointsBatch(SearchPointsBatchRequest) returns (SearchPointsBatchResponse) {}
+
+  rpc CreateCollection(CollectionInfo) returns (CollectionInfo) {}
+  rpc GetCollection(CollectionID) returns (CollectionInfo) {}
+  rpc ListCollections(ListCollectionsRequest) returns (ListCollectionsResponse) {}
+  rpc DeleteCollection(CollectionID) returns (google.protobuf.Empty) {}
 }
 
 
 message InsertVectorRequest {
   DenseVector vector = 1;
   Payload payload = 2;
+  CollectionID collection_id = 3;
 }
 
+message PointReference {
+  PointID id = 1;
+  CollectionID collection_id = 2;
+}
 
 message SearchRequest {
   DenseVector query_vector = 1;
   Similarity similarity = 2;
   uint64 limit = 3;
   uint64 ef = 4;
+  CollectionID collection_id = 5;
 }
 
 
@@ -89,4 +104,23 @@ message SearchPointsBatchRequest {
 
 message SearchPointsBatchResponse {
   repeated SearchResponse results = 1;
+}
+
+enum IndexType {
+  Flat = 0;
+  KDTree = 1;
+  HNSW = 2;
+}
+
+message CollectionInfo {
+  CollectionID collection_id = 1;
+  uint64 dimension = 2;
+  Similarity similarity = 3;
+  IndexType index_type = 4;
+}
+
+message ListCollectionsRequest {}
+
+message ListCollectionsResponse {
+  repeated CollectionInfo collections = 1;
 }

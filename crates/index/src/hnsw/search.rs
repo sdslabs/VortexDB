@@ -197,6 +197,20 @@ impl HnswIndex {
             if n == p {
                 continue;
             }
+
+            self.ensure_level(n, level);
+            let node = self.index.nodes.get_mut(&n).unwrap();
+            let list = &mut node.neighbors[level];
+
+            // The list has room: just add p, no need to compute distances or sort
+            if list.len() < m {
+                if !list.contains(&p) {
+                    list.push(p);
+                }
+                continue;
+            }
+
+            // The list is full: keep only the closest m
             self.merge_and_prune(n, level, &[p], m)?;
         }
         Ok(())

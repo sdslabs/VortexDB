@@ -9,50 +9,71 @@ message UUID {
 }
 
 service VectorDB {
-  //Insert a vector with a payload and return the assigned PointID
-  rpc InsertVector(InsertVectorRequest) returns (PointID) {}
+  //Insert a point with a dense and/or sparse vector and return its PointID
+  rpc InsertPoint(PointInput) returns (PointID) {}
 
-  //Delete a vector by its PointID
+  //Delete a point by its PointID
   rpc DeletePoint(PointID) returns (google.protobuf.Empty) {}
 
-  //Get a vector and its payload by PointID
+  //Get a point with its vectors and payload by PointID
   rpc GetPoint(PointID) returns (Point) {}
 
-  //Search for the k nearest vectors to a target vector given a distance function
-  rpc SearchPoints(SearchRequest) returns (SearchResponse) {}
+  //Search for the nearest points to a dense or sparse query
+  rpc Search(SearchRequest) returns (SearchResponse) {}
 
-  rpc InsertVectorsBatch(InsertVectorsBatchRequest) returns (InsertVectorsBatchResponse) {}
-rpc SearchPointsBatch(SearchPointsBatchRequest) returns (SearchPointsBatchResponse) {}
+  rpc InsertPointsBatch(InsertPointsBatchRequest) returns (InsertPointsBatchResponse) {}
+  rpc SearchBatch(SearchBatchRequest) returns (SearchBatchResponse) {}
 }
 
 
-message InsertVectorRequest {
+message PointInput {
+  PointID id = 1;
+  DenseVector dense_vector = 2;
+  SparseVector sparse_vector = 3;
+  Payload payload = 4;
+}
+
+
+message DenseQuery {
   DenseVector vector = 1;
-  Payload payload = 2;
+  Similarity similarity = 2;
+  optional uint64 ef = 3;
 }
 
 
 message SearchRequest {
-  DenseVector query_vector = 1;
-  Similarity similarity = 2;
-  uint64 limit = 3;
-  uint64 ef = 4;
+  uint64 limit = 1;
+  oneof query {
+    DenseQuery dense = 2;
+    SparseVector sparse = 3;
+  }
+}
+
+
+message SearchHit {
+  PointID id = 1;
+  float score = 2;
 }
 
 
 message SearchResponse {
-  repeated PointID result_point_ids = 1;
-  repeated float scores = 2;
+  repeated SearchHit hits = 1;
 }
 
 message DenseVector {
   repeated float values = 1;
 }
 
+message SparseVector {
+  repeated uint32 token_ids = 1;
+  repeated float weights = 2;
+}
+
 message Point {
   PointID id = 1;
   Payload payload = 2;
-  DenseVector vector = 3;
+  DenseVector dense_vector = 3;
+  SparseVector sparse_vector = 4;
 }
 
 message PointID {
@@ -76,18 +97,18 @@ message Payload {
   string content = 2;
 }
 
-message InsertVectorsBatchRequest {
-  repeated InsertVectorRequest vectors = 1;
+message InsertPointsBatchRequest {
+  repeated PointInput points = 1;
 }
 
-message InsertVectorsBatchResponse {
+message InsertPointsBatchResponse {
   repeated PointID ids = 1;
 }
 
-message SearchPointsBatchRequest {
+message SearchBatchRequest {
   repeated SearchRequest queries = 1;
 }
 
-message SearchPointsBatchResponse {
+message SearchBatchResponse {
   repeated SearchResponse results = 1;
 }

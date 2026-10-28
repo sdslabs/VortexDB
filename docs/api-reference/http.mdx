@@ -61,12 +61,31 @@ Vector Database server is running!
 
 ### Insert Point
 
-<ParamField body="vector" type="array" required>
-  Array of floating-point numbers representing the vector. Must match the configured `DIMENSION`.
+A point holds a dense vector, a sparse vector, or both. At least one is required.
+
+<ParamField body="id" type="string">
+  Optional UUID for the point. Generated when omitted. Inserting an id that already exists returns `409`.
 </ParamField>
 
-<ParamField body="payload" type="object" required>
-  Metadata object associated with the vector.
+<ParamField body="dense_vector" type="array">
+  Array of floating-point numbers. Must match the configured `DIMENSION`.
+</ParamField>
+
+<ParamField body="sparse_vector" type="object">
+  Sparse vector, for example from a SPLADE or BM25 encoder.
+
+  <Expandable title="sparse_vector properties">
+    <ParamField body="token_ids" type="array" required>
+      Non-empty, strictly increasing integer token ids
+    </ParamField>
+    <ParamField body="weights" type="array" required>
+      Finite weights, one per token id
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="payload" type="object">
+  Optional metadata associated with the point.
 
   <Expandable title="payload properties">
     <ParamField body="content_type" type="string" required>
@@ -87,7 +106,8 @@ Vector Database server is running!
 curl -X POST http://localhost:3000/points \
   -H "Content-Type: application/json" \
   -d '{
-    "vector": [0.1, 0.2, 0.3, 0.4],
+    "dense_vector": [0.1, 0.2, 0.3, 0.4],
+    "sparse_vector": {"token_ids": [3, 17, 42], "weights": [0.5, 1.2, 0.8]},
     "payload": {
       "content_type": "Text",
       "content": "Hello, VortexDB!"
@@ -106,21 +126,26 @@ curl -X POST http://localhost:3000/points \
 
 | Status | Description |
 |--------|-------------|
-| `400 Bad Request` | Invalid JSON or missing fields |
+| `400 Bad Request` | Invalid JSON, no vector, wrong dense dimension, or invalid sparse vector |
+| `409 Conflict` | A point with this id already exists |
 | `500 Internal Server Error` | Server error during insertion |
 
 ---
 
 ### Batch Insert
 
-Insert multiple vectors in a single request.
+Insert multiple points in a single request. The whole batch is validated before anything is written, so one invalid point rejects the batch.
 
-<ParamField body="vectors" type="array" required>
-  Array of insert objects, each with `vector` and `payload` fields (same shape as single insert).
+<ParamField body="points" type="array" required>
+  Array of point objects (same shape as single insert).
 </ParamField>
 
-<ResponseField name="point_ids" type="array">
-  Array of UUIDs for each created point, in the same order as the input.
+<ResponseField name="inserted" type="integer">
+  Number of points inserted.
+</ResponseField>
+
+<ResponseField name="ids" type="array">
+  UUIDs of the created points, in the same order as the input.
 </ResponseField>
 
 <CodeGroup>
@@ -128,22 +153,23 @@ Insert multiple vectors in a single request.
 curl -X POST http://localhost:3000/points/batch \
   -H "Content-Type: application/json" \
   -d '{
-    "vectors": [
+    "points": [
       {
-        "vector": [0.1, 0.2, 0.3, 0.4],
+        "dense_vector": [0.1, 0.2, 0.3, 0.4],
         "payload": {"content_type": "Text", "content": "Document one"}
       },
       {
-        "vector": [0.5, 0.6, 0.7, 0.8],
+        "sparse_vector": {"token_ids": [2, 9], "weights": [1.0, 0.25]},
         "payload": {"content_type": "Text", "content": "Document two"}
       }
     ]
   }'
 ```
 
-```json Response (201 Created)
+```json Response (200 OK)
 {
-  "point_ids": [
+  "inserted": 2,
+  "ids": [
     "550e8400-e29b-41d4-a716-446655440000",
     "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
   ]
@@ -155,7 +181,8 @@ curl -X POST http://localhost:3000/points/batch \
 
 | Status | Description |
 |--------|-------------|
-| `400 Bad Request` | Invalid JSON or missing fields |
+| `400 Bad Request` | Invalid JSON or an invalid point |
+| `409 Conflict` | An id already exists or is repeated in the batch |
 | `500 Internal Server Error` | Server error during insertion |
 
 ---
@@ -172,12 +199,16 @@ Retrieve a point by its ID.
   The point's UUID.
 </ResponseField>
 
-<ResponseField name="vector" type="array">
-  The stored vector values.
+<ResponseField name="dense_vector" type="array | null">
+  The stored dense vector, or `null`.
 </ResponseField>
 
-<ResponseField name="payload" type="object">
-  The associated payload metadata.
+<ResponseField name="sparse_vector" type="object | null">
+  The stored sparse vector, or `null`.
+</ResponseField>
+
+<ResponseField name="payload" type="object | null">
+  The associated payload, or `null`.
 </ResponseField>
 
 <CodeGroup>
@@ -188,7 +219,8 @@ curl http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000
 ```json Response (200 OK)
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "vector": [0.1, 0.2, 0.3, 0.4],
+  "dense_vector": [0.1, 0.2, 0.3, 0.4],
+  "sparse_vector": {"token_ids": [3, 17, 42], "weights": [0.5, 1.2, 0.8]},
   "payload": {
     "content_type": "Text",
     "content": "Hello, VortexDB!"
@@ -208,7 +240,7 @@ curl http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000
 
 ### Delete Point
 
-Delete a point by its ID.
+Delete a point by its ID. The point is removed from both the dense and the sparse index.
 
 <ParamField path="id" type="string" required>
   UUID of the point to delete.
@@ -234,41 +266,53 @@ curl -X DELETE http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000
 
 ### Search Points
 
-Search for the k nearest neighbors to a query vector.
-
-<ParamField body="vector" type="array" required>
-  Query vector. Must match the configured `DIMENSION`.
-</ParamField>
-
-<ParamField body="similarity" type="string" required>
-  Distance metric: `"Euclidean"`, `"Manhattan"`, `"Hamming"`, or `"Cosine"`
-</ParamField>
+Find the nearest points to a dense or a sparse query. `query` must contain exactly one of `dense` or `sparse`.
 
 <ParamField body="limit" type="integer" required>
   Maximum number of results to return.
 </ParamField>
 
-<ResponseField name="results" type="array">
-  Array of point IDs ordered by similarity (closest first).
+<ParamField body="query" type="object" required>
+  The query vector.
+
+  <Expandable title="query properties">
+    <ParamField body="dense" type="object">
+      Dense query: `vector` (must match `DIMENSION`), `similarity` (`"Euclidean"`, `"Manhattan"`, `"Hamming"` or `"Cosine"`), and optional `ef` (HNSW search breadth, ignored by other indexes).
+    </ParamField>
+    <ParamField body="sparse" type="object">
+      Sparse query: `token_ids` and `weights`, with the same rules as insert.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="hits" type="array">
+  Array of `{id, score}` objects, best first. Dense queries return a distance (lower is closer). Sparse queries return a dot product (higher is closer).
 </ResponseField>
 
 <CodeGroup>
-```bash Request
+```bash Dense
 curl -X POST http://localhost:3000/points/search \
   -H "Content-Type: application/json" \
   -d '{
-    "vector": [0.1, 0.2, 0.3, 0.4],
-    "similarity": "Cosine",
-    "limit": 5
+    "limit": 5,
+    "query": {"dense": {"vector": [0.1, 0.2, 0.3, 0.4], "similarity": "Cosine"}}
+  }'
+```
+
+```bash Sparse
+curl -X POST http://localhost:3000/points/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "limit": 5,
+    "query": {"sparse": {"token_ids": [3, 17], "weights": [1.0, 0.5]}}
   }'
 ```
 
 ```json Response (200 OK)
 {
-  "results": [
-    "550e8400-e29b-41d4-a716-446655440000",
-    "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-    "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+  "hits": [
+    {"id": "550e8400-e29b-41d4-a716-446655440000", "score": 0.012},
+    {"id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8", "score": 0.087}
   ]
 }
 ```
@@ -278,21 +322,21 @@ curl -X POST http://localhost:3000/points/search \
 
 | Status | Description |
 |--------|-------------|
-| `400 Bad Request` | Invalid JSON or missing fields |
+| `400 Bad Request` | Invalid JSON, zero limit, wrong dense dimension, or invalid sparse vector |
 | `500 Internal Server Error` | Server error during search |
 
 ---
 
 ### Batch Search
 
-Search against multiple query vectors in a single request.
+Run multiple queries in a single request. Dense and sparse queries can be mixed.
 
 <ParamField body="queries" type="array" required>
-  Array of search query objects, each with `vector`, `similarity`, and `limit`.
+  Array of search objects (same shape as single search).
 </ParamField>
 
 <ResponseField name="results" type="array">
-  Array of result arrays, one per input query, each ordered by similarity.
+  One `{hits}` object per input query, in order.
 </ResponseField>
 
 <CodeGroup>
@@ -301,8 +345,8 @@ curl -X POST http://localhost:3000/points/search/batch \
   -H "Content-Type: application/json" \
   -d '{
     "queries": [
-      {"vector": [0.1, 0.2, 0.3, 0.4], "similarity": "Cosine", "limit": 2},
-      {"vector": [0.5, 0.6, 0.7, 0.8], "similarity": "Euclidean", "limit": 2}
+      {"limit": 2, "query": {"dense": {"vector": [0.1, 0.2, 0.3, 0.4], "similarity": "Cosine"}}},
+      {"limit": 2, "query": {"sparse": {"token_ids": [3, 17], "weights": [1.0, 0.5]}}}
     ]
   }'
 ```
@@ -310,8 +354,8 @@ curl -X POST http://localhost:3000/points/search/batch \
 ```json Response (200 OK)
 {
   "results": [
-    ["550e8400-...", "6ba7b810-..."],
-    ["f47ac10b-...", "9a1b2c3d-..."]
+    {"hits": [{"id": "550e8400-...", "score": 0.012}, {"id": "6ba7b810-...", "score": 0.087}]},
+    {"hits": [{"id": "f47ac10b-...", "score": 1.5}]}
   ]
 }
 ```
@@ -321,7 +365,7 @@ curl -X POST http://localhost:3000/points/search/batch \
 
 | Status | Description |
 |--------|-------------|
-| `400 Bad Request` | Invalid JSON or missing fields |
+| `400 Bad Request` | Invalid JSON or an invalid query |
 | `500 Internal Server Error` | Server error during search |
 
 ---
@@ -356,7 +400,7 @@ curl http://localhost:3000/health
 POINT_ID=$(curl -s -X POST http://localhost:3000/points \
   -H "Content-Type: application/json" \
   -d '{
-    "vector": [0.1, 0.2, 0.3, 0.4],
+    "dense_vector": [0.1, 0.2, 0.3, 0.4],
     "payload": {"content_type": "Text", "content": "First document"}
   }' | jq -r '.point_id')
 
@@ -369,9 +413,8 @@ curl http://localhost:3000/points/$POINT_ID
 curl -X POST http://localhost:3000/points/search \
   -H "Content-Type: application/json" \
   -d '{
-    "vector": [0.15, 0.25, 0.35, 0.45],
-    "similarity": "Cosine",
-    "limit": 10
+    "limit": 10,
+    "query": {"dense": {"vector": [0.15, 0.25, 0.35, 0.45], "similarity": "Cosine"}}
   }'
 
 # 5. Delete the point

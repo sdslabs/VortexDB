@@ -52,7 +52,7 @@ async fn in_memory_storage_http_smoke_test() {
         .post("/points")
         .add_header("api-key", API_KEY)
         .json(&json!({
-            "vector": [1.0, 0.0, 0.0],
+            "dense_vector": [1.0, 0.0, 0.0],
             "payload": {
                 "content_type": "Text",
                 "content": "smoke-test"
@@ -70,21 +70,19 @@ async fn in_memory_storage_http_smoke_test() {
     get_response.assert_status_ok();
     let point_body: serde_json::Value = get_response.json();
     assert_eq!(point_body["payload"]["content"], "smoke-test");
-    assert_eq!(point_body["vector"], json!([1.0, 0.0, 0.0]));
+    assert_eq!(point_body["dense_vector"], json!([1.0, 0.0, 0.0]));
 
     let search_response = server
         .post("/points/search")
         .add_header("api-key", API_KEY)
         .json(&json!({
-            "vector": [1.0, 0.0, 0.0],
-            "similarity": "Cosine",
-            "limit": 1
+            "limit": 1,
+            "query": {"dense": {"vector": [1.0, 0.0, 0.0], "similarity": "Cosine"}}
         }))
         .await;
     search_response.assert_status_ok();
     let search_body: serde_json::Value = search_response.json();
-    assert_eq!(search_body["results"], json!([point_id]));
-    assert_eq!(search_body["scores"], json!([0.0]));
+    assert_eq!(search_body["hits"], json!([{"id": point_id, "score": 0.0}]));
 
     let delete_response = server
         .delete(&format!("/points/{point_id}"))
@@ -115,7 +113,7 @@ async fn protected_routes_reject_missing_key() {
         .assert_status(StatusCode::UNAUTHORIZED);
     server
         .post("/points")
-        .json(&json!({"vector": [1.0, 0.0, 0.0], "payload": {"content_type": "Text", "content": "x"}}))
+        .json(&json!({"dense_vector": [1.0, 0.0, 0.0], "payload": {"content_type": "Text", "content": "x"}}))
         .await
         .assert_status(StatusCode::UNAUTHORIZED);
 }
@@ -137,7 +135,7 @@ async fn readonly_key_can_read_but_not_write() {
     let insert_response = server
         .post("/points")
         .add_header("api-key", API_KEY)
-        .json(&json!({"vector": [1.0, 0.0, 0.0], "payload": {"content_type": "Text", "content": "x"}}))
+        .json(&json!({"dense_vector": [1.0, 0.0, 0.0], "payload": {"content_type": "Text", "content": "x"}}))
         .await;
     let point_id = insert_response.json::<serde_json::Value>()["point_id"]
         .as_str()
@@ -153,7 +151,7 @@ async fn readonly_key_can_read_but_not_write() {
     server
         .post("/points/search")
         .add_header("api-key", READONLY_API_KEY)
-        .json(&json!({"vector": [1.0, 0.0, 0.0], "similarity": "Cosine", "limit": 1}))
+        .json(&json!({"limit": 1, "query": {"dense": {"vector": [1.0, 0.0, 0.0], "similarity": "Cosine"}}}))
         .await
         .assert_status_ok();
 
@@ -166,7 +164,74 @@ async fn readonly_key_can_read_but_not_write() {
     server
         .post("/points")
         .add_header("api-key", READONLY_API_KEY)
-        .json(&json!({"vector": [1.0, 0.0, 0.0], "payload": {"content_type": "Text", "content": "y"}}))
+        .json(&json!({"dense_vector": [1.0, 0.0, 0.0], "payload": {"content_type": "Text", "content": "y"}}))
         .await
         .assert_status(StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn sparse_and_dense_batch_round_trip() {
+    let server = test_server();
+    let sparse_id = "00000000-0000-0000-0000-000000000002";
+
+    let insert_response = server
+        .post("/points/batch")
+        .add_header("api-key", API_KEY)
+        .json(&json!({"points": [
+            {"dense_vector": [1.0, 0.0, 0.0]},
+            {"id": sparse_id, "sparse_vector": {"token_ids": [1, 4], "weights": [0.5, 2.0]}}
+        ]}))
+        .await;
+    insert_response.assert_status_ok();
+    let dense_id = insert_response.json::<serde_json::Value>()["ids"][0].clone();
+
+    let search_response = server
+        .post("/points/search/batch")
+        .add_header("api-key", API_KEY)
+        .json(&json!({"queries": [
+            {"limit": 5, "query": {"dense": {"vector": [1.0, 0.0, 0.0], "similarity": "Cosine"}}},
+            {"limit": 5, "query": {"sparse": {"token_ids": [4], "weights": [1.0]}}}
+        ]}))
+        .await;
+    search_response.assert_status_ok();
+    let body: serde_json::Value = search_response.json();
+    assert_eq!(body["results"][0]["hits"][0]["id"], dense_id);
+    assert_eq!(
+        body["results"][1]["hits"],
+        json!([{"id": sparse_id, "score": 2.0}])
+    );
+
+    let point: serde_json::Value = server
+        .get(&format!("/points/{sparse_id}"))
+        .add_header("api-key", API_KEY)
+        .await
+        .json();
+    assert_eq!(point["dense_vector"], json!(null));
+    assert_eq!(point["sparse_vector"]["token_ids"], json!([1, 4]));
+}
+
+#[tokio::test]
+async fn batch_errors_use_api_status_codes() {
+    let server = test_server();
+    let id = "00000000-0000-0000-0000-000000000003";
+    let point = json!({"id": id, "dense_vector": [1.0, 0.0, 0.0]});
+
+    server
+        .post("/points/batch")
+        .add_header("api-key", API_KEY)
+        .json(&json!({"points": [point]}))
+        .await
+        .assert_status_ok();
+    server
+        .post("/points/batch")
+        .add_header("api-key", API_KEY)
+        .json(&json!({"points": [point]}))
+        .await
+        .assert_status(StatusCode::CONFLICT);
+    server
+        .post("/points")
+        .add_header("api-key", API_KEY)
+        .json(&json!({"payload": {"content_type": "Text", "content": "no vectors"}}))
+        .await
+        .assert_status(StatusCode::BAD_REQUEST);
 }

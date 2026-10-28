@@ -1,6 +1,13 @@
 import asyncio
 
-from vortexdb import AsyncVortexDB, DenseVector, Payload, Similarity
+from vortexdb import (
+    AsyncVortexDB,
+    DenseQuery,
+    DenseVector,
+    Payload,
+    SearchQuery,
+    Similarity,
+)
 
 
 async def main():
@@ -9,7 +16,7 @@ async def main():
         api_key="my-secret-password",
     ) as db:
         point_id = await db.insert(
-            vector=DenseVector([0.1, 0.2, 0.3]),
+            dense_vector=DenseVector([0.1, 0.2, 0.3]),
             payload=Payload.text("hello async vortex"),
         )
 
@@ -18,9 +25,10 @@ async def main():
             print(point.pretty())
 
         results = await db.search(
-            vector=DenseVector([0.1, 0.2, 0.3]),
-            similarity=Similarity.COSINE,
-            limit=5,
+            query=SearchQuery(
+                limit=5,
+                query=DenseQuery(DenseVector([0.1, 0.2, 0.3]), Similarity.COSINE),
+            )
         )
         print(results)
 

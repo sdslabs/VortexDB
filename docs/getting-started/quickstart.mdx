@@ -16,7 +16,7 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
 <Tabs>
   <Tab title="Python SDK">
     ```python
-    from vortexdb import VortexDB, DenseVector, Payload, Similarity
+    from vortexdb import VortexDB, DenseVector, Payload
 
     # Connect to VortexDB
     db = VortexDB(
@@ -26,7 +26,7 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
 
     # Insert a vector with a text payload
     point_id = db.insert(
-        vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+        dense_vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
         payload=Payload.text("Hello, VortexDB!")
     )
     print(f"Inserted point: {point_id}")
@@ -38,9 +38,10 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
   <Tab title="HTTP API">
     ```bash
     curl -X POST http://localhost:3000/points \
+      -H "api-key: your-secure-password" \
       -H "Content-Type: application/json" \
       -d '{
-        "vector": [0.1, 0.2, 0.3, 0.4],
+        "dense_vector": [0.1, 0.2, 0.3, 0.4],
         "payload": {
           "content_type": "Text",
           "content": "Hello, VortexDB!"
@@ -59,12 +60,12 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
     ```protobuf
     // Using grpcurl
     grpcurl -plaintext \
-      -H "authorization: your-secure-password" \
+      -H "authorization: Bearer your-secure-password" \
       -d '{
-        "vector": {"values": [0.1, 0.2, 0.3, 0.4]},
-        "payload": {"content_type": 1, "content": "Hello, VortexDB!"}
+        "dense_vector": {"values": [0.1, 0.2, 0.3, 0.4]},
+        "payload": {"content_type": "Text", "content": "Hello, VortexDB!"}
       }' \
-      localhost:50051 vectordb.VectorDB/InsertVector
+      localhost:50051 vectordb.VectorDB/InsertPoint
     ```
   </Tab>
 </Tabs>
@@ -74,23 +75,24 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
 <Tabs>
   <Tab title="Python SDK">
     ```python
-    from vortexdb import VortexDB, DenseVector, Similarity
+    from vortexdb import VortexDB, DenseQuery, DenseVector, SearchQuery, Similarity
 
     db = VortexDB(
         grpc_url="localhost:50051",
         api_key="your-secure-password"
     )
 
-    # Search for 5 most similar vectors using cosine similarity
-    results = db.search(
-        vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
-        similarity=Similarity.COSINE,
-        limit=5
+    # Search for the 5 closest vectors using cosine distance
+    hits = db.search(
+        query=SearchQuery(
+            limit=5,
+            query=DenseQuery(DenseVector([0.1, 0.2, 0.3, 0.4]), Similarity.COSINE),
+        )
     )
 
-    print(f"Found {len(results)} similar vectors:")
-    for point_id in results:
-        print(f"  - {point_id}")
+    print(f"Found {len(hits)} similar vectors:")
+    for hit in hits:
+        print(f"  - {hit.id} (distance {hit.score:.3f})")
 
     db.close()
     ```
@@ -98,20 +100,20 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
   <Tab title="HTTP API">
     ```bash
     curl -X POST http://localhost:3000/points/search \
+      -H "api-key: your-secure-password" \
       -H "Content-Type: application/json" \
       -d '{
-        "vector": [0.1, 0.2, 0.3, 0.4],
-        "similarity": "Cosine",
-        "limit": 5
+        "limit": 5,
+        "query": {"dense": {"vector": [0.1, 0.2, 0.3, 0.4], "similarity": "Cosine"}}
       }'
     ```
     
     Response:
     ```json
     {
-      "results": [
-        "550e8400-e29b-41d4-a716-446655440000",
-        "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+      "hits": [
+        {"id": "550e8400-e29b-41d4-a716-446655440000", "score": 0.0},
+        {"id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8", "score": 0.087}
       ]
     }
     ```
@@ -129,21 +131,26 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
     if point:
         print(point.pretty())
         # Output:
-        # Point ID: 550e8400-e29b-41d4-a716-446655440000
-        # Vector: [0.1, 0.2, 0.3, 0.4]
-        # Payload: Hello, VortexDB!
+        # Point:
+        #  id = 550e8400-e29b-41d4-a716-446655440000,
+        #  dense_vector = [0.1, 0.2, 0.3, 0.4],
+        #  sparse_vector = None,
+        #  payload_type = TEXT,
+        #  payload = 'Hello, VortexDB!'
     ```
   </Tab>
   <Tab title="HTTP API">
     ```bash
-    curl http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000
+    curl http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000 \
+      -H "api-key: your-secure-password"
     ```
     
     Response:
     ```json
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
-      "vector": [0.1, 0.2, 0.3, 0.4],
+      "dense_vector": [0.1, 0.2, 0.3, 0.4],
+      "sparse_vector": null,
       "payload": {
         "content_type": "Text",
         "content": "Hello, VortexDB!"
@@ -164,7 +171,8 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
   </Tab>
   <Tab title="HTTP API">
     ```bash
-    curl -X DELETE http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000
+    curl -X DELETE http://localhost:3000/points/550e8400-e29b-41d4-a716-446655440000 \
+      -H "api-key: your-secure-password"
     ```
   </Tab>
 </Tabs>
@@ -174,7 +182,7 @@ Make sure VortexDB is running (see [Installation](/getting-started/installation)
 Here's a complete example using the Python SDK with context manager:
 
 ```python
-from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb import VortexDB, DenseQuery, DenseVector, Payload, SearchQuery, Similarity
 
 # Using context manager for automatic cleanup
 with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
@@ -188,22 +196,23 @@ with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
     point_ids = []
     for vec, text in vectors:
         pid = db.insert(
-            vector=DenseVector(vec),
+            dense_vector=DenseVector(vec),
             payload=Payload.text(text)
         )
         point_ids.append(pid)
         print(f"Inserted: {text} -> {pid}")
 
     # Search for vectors similar to the first one
-    results = db.search(
-        vector=DenseVector([0.15, 0.25, 0.35, 0.45]),
-        similarity=Similarity.COSINE,
-        limit=2
+    hits = db.search(
+        query=SearchQuery(
+            limit=2,
+            query=DenseQuery(DenseVector([0.15, 0.25, 0.35, 0.45]), Similarity.COSINE),
+        )
     )
 
     print(f"\nTop 2 similar vectors:")
-    for pid in results:
-        point = db.get(point_id=pid)
+    for hit in hits:
+        point = db.get(point_id=hit.id)
         print(f"  - {point.payload.content}")
 ```
 

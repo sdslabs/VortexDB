@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use uuid::Uuid;
 
+use crate::SparseError;
+
 pub type PointId = Uuid;
 
 /// Type of vector element.
@@ -11,15 +13,46 @@ pub type ElementByte = u8;
 
 pub type Dimension = usize;
 
-// Dense Vector and Vector are considered same
-// Sparse vector implementation not supported yet. Refer lib/sparse/src/common/sparse_vector.rs
+pub type TokenID = u32;
+
 pub type DenseVector = Vec<Element>;
 
-pub type Magic = [u8; 4];
-
-pub enum StoredVector {
-    Dense(DenseVector),
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct SparseVector {
+    pub token_ids: Vec<TokenID>,
+    pub weights: Vec<Element>,
 }
+
+impl SparseVector {
+    pub fn validate(&self) -> Result<(), SparseError> {
+        if self.token_ids.len() != self.weights.len() {
+            return Err(SparseError::LengthMismatch {
+                ids: self.token_ids.len(),
+                weights: self.weights.len(),
+            });
+        }
+
+        if self.token_ids.is_empty() {
+            return Err(SparseError::Empty);
+        }
+
+        if let Some(i) = self.token_ids.windows(2).position(|w| w[0] >= w[1]) {
+            return Err(SparseError::UnsortedTokenIds { index: i + 1 });
+        }
+
+        if let Some(i) = self.weights.iter().position(|w| !w.is_finite()) {
+            return Err(SparseError::NonFiniteWeight { index: i });
+        }
+
+        if let Some(i) = self.weights.iter().position(|&w| w < 0.0) {
+            return Err(SparseError::NegativeWeight { index: i });
+        }
+
+        Ok(())
+    }
+}
+
+pub type Magic = [u8; 4];
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub enum ContentType {
@@ -37,14 +70,16 @@ pub struct Payload {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PointInput {
     pub id: Option<PointId>,
-    pub vector: Option<DenseVector>,
+    pub dense_vector: Option<DenseVector>,
+    pub sparse_vector: Option<SparseVector>,
     pub payload: Option<Payload>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Point {
     pub id: PointId,
-    pub vector: Option<DenseVector>,
+    pub dense_vector: Option<DenseVector>,
+    pub sparse_vector: Option<SparseVector>,
     pub payload: Option<Payload>,
 }
 
@@ -77,22 +112,39 @@ pub struct BatchInsertResponse {
 // For batch search
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchSearchRequest {
-    pub queries: Vec<SearchQueryInput>,
+    pub queries: Vec<SearchQuery>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SearchQueryInput {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DenseQuery {
     pub vector: DenseVector,
     pub similarity: Similarity,
-    pub limit: usize,
     #[serde(default)]
     pub ef: Option<usize>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct SearchHit {
+    pub id: PointId,
+    pub score: f32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryVector {
+    Dense(DenseQuery),
+    Sparse(SparseVector),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SearchQuery {
+    pub limit: usize,
+    pub query: QueryVector,
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct SearchResponse {
-    pub results: Vec<PointId>,
-    pub scores: Vec<f32>,
+    pub hits: Vec<SearchHit>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

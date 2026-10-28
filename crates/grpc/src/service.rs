@@ -6,13 +6,13 @@ use crate::interceptors;
 use crate::service::vectordb::{ContentType, Uuid};
 use crate::utils::log_rpc;
 use crate::{constants::SIMILARITY_PROTOBUFF_MAP, utils::ServerEndpoint};
-use defs::SearchQueryInput;
 use tonic::{Request, Response, Status, service::InterceptorLayer, transport::Server};
 use tracing::{Level, event};
 use uuid::Uuid as UuidCrate;
 use vectordb::{
-    DenseVector, InsertVectorRequest, InsertVectorsBatchRequest, InsertVectorsBatchResponse, Point,
-    PointId, SearchPointsBatchRequest, SearchPointsBatchResponse, SearchRequest, SearchResponse,
+    DenseVector, InsertPointsBatchRequest, InsertPointsBatchResponse, Point, PointId, PointInput,
+    SearchBatchRequest, SearchBatchResponse, SearchHit, SearchRequest, SearchResponse,
+    SparseVector, search_request,
     vector_db_server::{VectorDb, VectorDbServer},
 };
 
@@ -31,240 +31,214 @@ impl VectorDBService {
     }
 }
 
+fn parse_point_id(point_id: PointId) -> Result<UuidCrate, Status> {
+    let value = point_id.id.unwrap_or_default().value;
+    UuidCrate::from_str(&value)
+        .map_err(|_| Status::invalid_argument(format!("invalid point id: {}", value)))
+}
+
+fn to_proto_point_id(id: UuidCrate) -> PointId {
+    PointId {
+        id: Some(Uuid {
+            value: id.to_string(),
+        }),
+    }
+}
+
+fn from_proto_payload(payload: vectordb::Payload) -> defs::Payload {
+    let content_type =
+        match ContentType::try_from(payload.content_type).unwrap_or(ContentType::Text) {
+            ContentType::Text => defs::ContentType::Text,
+            ContentType::Image => defs::ContentType::Image,
+        };
+    defs::Payload {
+        content_type,
+        content: payload.content,
+    }
+}
+
+fn to_proto_payload(payload: defs::Payload) -> vectordb::Payload {
+    let content_type = match payload.content_type {
+        defs::ContentType::Text => ContentType::Text,
+        defs::ContentType::Image => ContentType::Image,
+    };
+    vectordb::Payload {
+        content_type: content_type as i32,
+        content: payload.content,
+    }
+}
+
+fn from_proto_sparse(sparse_vector: SparseVector) -> defs::SparseVector {
+    defs::SparseVector {
+        token_ids: sparse_vector.token_ids,
+        weights: sparse_vector.weights,
+    }
+}
+
+fn from_proto_point_input(point: PointInput) -> Result<defs::PointInput, Status> {
+    Ok(defs::PointInput {
+        id: point.id.map(parse_point_id).transpose()?,
+        dense_vector: point.dense_vector.map(|v| v.values),
+        sparse_vector: point.sparse_vector.map(from_proto_sparse),
+        payload: point.payload.map(from_proto_payload),
+    })
+}
+
+fn to_proto_point(point: defs::Point) -> Point {
+    Point {
+        id: Some(to_proto_point_id(point.id)),
+        dense_vector: point.dense_vector.map(|values| DenseVector { values }),
+        sparse_vector: point.sparse_vector.map(|sv| SparseVector {
+            token_ids: sv.token_ids,
+            weights: sv.weights,
+        }),
+        payload: point.payload.map(to_proto_payload),
+    }
+}
+
+fn from_proto_search_request(request: SearchRequest) -> Result<defs::SearchQuery, Status> {
+    let query = match request
+        .query
+        .ok_or_else(|| Status::invalid_argument("query is required"))?
+    {
+        search_request::Query::Dense(dense) => {
+            let similarity = SIMILARITY_PROTOBUFF_MAP
+                .get(dense.similarity as usize)
+                .ok_or_else(|| Status::invalid_argument("Invalid similarity"))?;
+            let vector = dense
+                .vector
+                .ok_or_else(|| Status::invalid_argument("dense query vector is required"))?;
+            defs::QueryVector::Dense(defs::DenseQuery {
+                vector: vector.values,
+                similarity: *similarity,
+                ef: dense.ef.map(|ef| ef as usize),
+            })
+        }
+        search_request::Query::Sparse(sparse_vector) => {
+            defs::QueryVector::Sparse(from_proto_sparse(sparse_vector))
+        }
+    };
+
+    Ok(defs::SearchQuery {
+        limit: request.limit as usize,
+        query,
+    })
+}
+
+fn to_proto_search_response(hits: Vec<defs::SearchHit>) -> SearchResponse {
+    SearchResponse {
+        hits: hits
+            .into_iter()
+            .map(|hit| SearchHit {
+                id: Some(to_proto_point_id(hit.id)),
+                score: hit.score,
+            })
+            .collect(),
+    }
+}
+
 #[tonic::async_trait]
 impl VectorDb for VectorDBService {
-    async fn insert_vector(
+    async fn insert_point(
         &self,
-        request: Request<InsertVectorRequest>,
+        request: Request<PointInput>,
     ) -> Result<Response<PointId>, Status> {
-        log_rpc("insert_vector", self.logging);
+        log_rpc("insert_point", self.logging);
         interceptors::require_write_role(&request)?;
 
-        let inner_request = request.into_inner();
+        let point = from_proto_point_input(request.into_inner())?;
+        let id = self
+            .vector_db
+            .insert(point)
+            .map_err(|e| Status::from(GrpcError::from(e)))?;
 
-        let dense_vector = inner_request.vector;
-        if dense_vector.is_none() {
-            return Err(Status::invalid_argument("dense_vector is empty"));
-        }
-
-        // TODO: Implement payload handling once its defined
-        // fetch payload and default to empty struct otherwise
-
-        let payload = inner_request.payload.unwrap_or_default();
-        let payload_content = payload.content;
-        let payload_type =
-            match ContentType::try_from(payload.content_type).unwrap_or(ContentType::Text) {
-                ContentType::Text => defs::ContentType::Text,
-                ContentType::Image => defs::ContentType::Image,
-            };
-
-        let point_id = self.vector_db.insert(
-            dense_vector.unwrap().values,
-            defs::Payload {
-                content_type: payload_type,
-                content: payload_content,
-            },
-        );
-
-        let res = point_id.map_err(|e| Status::from(crate::error::GrpcError::from(e)))?;
-
-        Ok(Response::new(PointId {
-            id: Some(Uuid {
-                value: res.to_string(),
-            }),
-        }))
+        Ok(Response::new(to_proto_point_id(id)))
     }
 
     async fn get_point(&self, request: Request<PointId>) -> Result<Response<Point>, Status> {
         log_rpc("get_point", self.logging);
 
-        let inner_request = request.into_inner();
-
-        let point_id = inner_request.id.unwrap_or_default().value;
-        let point_opt = self
+        let point_id = parse_point_id(request.into_inner())?;
+        let point = self
             .vector_db
-            .get(UuidCrate::from_str(&point_id).unwrap())
-            .map_err(|e| Status::from(crate::error::GrpcError::from(e)))?;
+            .get(point_id)
+            .map_err(|e| Status::from(GrpcError::from(e)))?
+            .ok_or_else(|| Status::not_found(format!("point not found: {}", point_id)))?;
 
-        // return error if not found
-        let point = point_opt.ok_or(Status::not_found(format!("point not found: {}", point_id)))?;
-
-        let payload = point.payload.map(|p| vectordb::Payload {
-            content_type: match p.content_type {
-                defs::ContentType::Text => ContentType::Text as i32,
-                defs::ContentType::Image => ContentType::Image as i32,
-            },
-            content: p.content,
-        });
-
-        Ok(Response::new(Point {
-            id: Some(PointId {
-                id: Some(Uuid {
-                    value: point.id.to_string(),
-                }),
-            }),
-            vector: Some(DenseVector {
-                values: point.vector.unwrap_or_default(),
-            }),
-            payload,
-        }))
+        Ok(Response::new(to_proto_point(point)))
     }
 
-    async fn search_points(
+    async fn search(
         &self,
         request: Request<SearchRequest>,
     ) -> Result<Response<SearchResponse>, Status> {
-        log_rpc("search_points", self.logging);
+        log_rpc("search", self.logging);
 
-        let search_request = request.into_inner();
-
-        // extract request arguments
-        let query_vect = search_request
-            .query_vector
-            .ok_or(Status::invalid_argument("Invalid query_vector"))?;
-        let similarity = SIMILARITY_PROTOBUFF_MAP
-            .get(search_request.similarity as usize)
-            .ok_or(Status::invalid_argument("Invalid similarity"))?;
-        let limit = search_request.limit;
-
-        if limit == 0 {
-            return Err(Status::invalid_argument("Limit must be greater than zero"));
-        }
-
-        let result_point_ids = self
+        let query = from_proto_search_request(request.into_inner())?;
+        let hits = self
             .vector_db
-            .search(SearchQueryInput {
-                vector: query_vect.values,
-                similarity: *similarity,
-                limit: limit as usize,
-                ef: (search_request.ef > 0).then_some(search_request.ef as usize),
-            })
-            .map_err(|e| Status::from(crate::error::GrpcError::from(e)))?;
+            .search(query)
+            .map_err(|e| Status::from(GrpcError::from(e)))?;
 
-        // create a mapped vector of PointIds
-        let (result, scores) = result_point_ids
-            .into_iter()
-            .map(|(id, score)| {
-                (
-                    PointId {
-                        id: Some(Uuid {
-                            value: id.to_string(),
-                        }),
-                    },
-                    score,
-                )
-            })
-            .unzip();
-
-        Ok(Response::new(SearchResponse {
-            result_point_ids: result,
-            scores,
-        }))
+        Ok(Response::new(to_proto_search_response(hits)))
     }
 
     async fn delete_point(&self, request: Request<PointId>) -> Result<Response<()>, Status> {
         log_rpc("delete_point", self.logging);
         interceptors::require_write_role(&request)?;
 
-        let point_id = request.into_inner().id.unwrap_or_default().value;
+        let point_id = parse_point_id(request.into_inner())?;
 
-        match self
-            .vector_db
-            .delete(UuidCrate::from_str(&point_id).unwrap())
-        {
-            Ok(found) => {
-                if found {
-                    Ok(Response::new(()))
-                } else {
-                    Err(Status::not_found("Point not found"))
-                }
-            }
-            Err(e) => Err(Status::from(crate::error::GrpcError::from(e))),
+        match self.vector_db.delete(point_id) {
+            Ok(true) => Ok(Response::new(())),
+            Ok(false) => Err(Status::not_found("Point not found")),
+            Err(e) => Err(Status::from(GrpcError::from(e))),
         }
     }
 
-    async fn insert_vectors_batch(
+    async fn insert_points_batch(
         &self,
-        request: tonic::Request<InsertVectorsBatchRequest>,
-    ) -> Result<tonic::Response<InsertVectorsBatchResponse>, tonic::Status> {
+        request: Request<InsertPointsBatchRequest>,
+    ) -> Result<Response<InsertPointsBatchResponse>, Status> {
         interceptors::require_write_role(&request)?;
-        let req = request.into_inner();
-        let mut ids = Vec::with_capacity(req.vectors.len());
 
-        for vec in req.vectors {
-            let payload = vec.payload.map(|p| defs::Payload {
-                content_type: match ContentType::try_from(p.content_type)
-                    .unwrap_or(ContentType::Text)
-                {
-                    ContentType::Text => defs::ContentType::Text,
-                    ContentType::Image => defs::ContentType::Image,
-                },
-                content: p.content,
-            });
+        let points = request
+            .into_inner()
+            .points
+            .into_iter()
+            .map(from_proto_point_input)
+            .collect::<Result<Vec<_>, Status>>()?;
 
-            let id = self
-                .vector_db
-                .insert(
-                    vec.vector.unwrap_or_default().values,
-                    payload.unwrap_or_default(),
-                )
-                .map_err(|e| tonic::Status::internal(e.to_string()))?;
+        let ids = self
+            .vector_db
+            .insert_batch(points)
+            .map_err(|e| Status::from(GrpcError::from(e)))?;
 
-            ids.push(PointId {
-                id: Some(Uuid {
-                    value: id.to_string(),
-                }),
-            });
-        }
-
-        Ok(tonic::Response::new(InsertVectorsBatchResponse { ids }))
+        Ok(Response::new(InsertPointsBatchResponse {
+            ids: ids.into_iter().map(to_proto_point_id).collect(),
+        }))
     }
 
-    async fn search_points_batch(
+    async fn search_batch(
         &self,
-        request: tonic::Request<SearchPointsBatchRequest>,
-    ) -> Result<tonic::Response<SearchPointsBatchResponse>, tonic::Status> {
-        let req = request.into_inner();
-        let mut results = Vec::with_capacity(req.queries.len());
+        request: Request<SearchBatchRequest>,
+    ) -> Result<Response<SearchBatchResponse>, Status> {
+        let queries = request
+            .into_inner()
+            .queries
+            .into_iter()
+            .map(from_proto_search_request)
+            .collect::<Result<Vec<_>, Status>>()?;
 
-        for query in req.queries {
-            let similarity = SIMILARITY_PROTOBUFF_MAP
-                .get(query.similarity as usize)
-                .ok_or(tonic::Status::invalid_argument("Invalid similarity"))?;
+        let results = self
+            .vector_db
+            .search_batch(queries)
+            .map_err(|e| Status::from(GrpcError::from(e)))?
+            .into_iter()
+            .map(to_proto_search_response)
+            .collect();
 
-            let ids = self
-                .vector_db
-                .search(SearchQueryInput {
-                    vector: query
-                        .query_vector
-                        .ok_or(tonic::Status::invalid_argument("missing query_vector"))?
-                        .values,
-                    similarity: *similarity,
-                    limit: query.limit as usize,
-                    ef: (query.ef > 0).then_some(query.ef as usize),
-                })
-                .map_err(|e| tonic::Status::from(GrpcError::from(e)))?;
-
-            let (result_point_ids, scores) = ids
-                .into_iter()
-                .map(|(id, score)| {
-                    (
-                        PointId {
-                            id: Some(Uuid {
-                                value: id.to_string(),
-                            }),
-                        },
-                        score,
-                    )
-                })
-                .unzip();
-            results.push(SearchResponse {
-                result_point_ids,
-                scores,
-            });
-        }
-
-        Ok(tonic::Response::new(SearchPointsBatchResponse { results }))
+        Ok(Response::new(SearchBatchResponse { results }))
     }
 }
 pub async fn run_server(

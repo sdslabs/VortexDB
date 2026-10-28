@@ -1,4 +1,4 @@
-use defs::{Dimension, PointId};
+use defs::{Dimension, PointId, SparseError};
 use snafu::prelude::*;
 
 #[derive(Debug, Snafu)]
@@ -20,6 +20,15 @@ pub enum ApiError {
 
     #[snafu(display("Point {id} not found"))]
     PointNotFound { id: PointId },
+
+    #[snafu(display("Point {id} has neither a dense nor a sparse vector"))]
+    MissingVector { id: PointId },
+
+    #[snafu(display("Point {id} already exists"))]
+    PointAlreadyExists { id: PointId },
+
+    #[snafu(display("Invalid sparse vector: {source}"))]
+    InvalidSparseVector { source: SparseError },
 
     #[snafu(display("Invalid search limit: {limit}"))]
     InvalidSearchLimit { limit: usize },

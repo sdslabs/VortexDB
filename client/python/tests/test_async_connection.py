@@ -7,6 +7,7 @@ from vortexdb._grpc_common import map_grpc_error
 from vortexdb.async_connection import AsyncGRPCConnection
 from vortexdb.config import VortexDBConfig
 from vortexdb.exceptions import (
+    AlreadyExistsError,
     AuthenticationError,
     InternalServerError,
     InvalidArgumentError,
@@ -80,6 +81,7 @@ def test_async_grpc_error_mapping():
         (grpc.StatusCode.UNAUTHENTICATED, AuthenticationError),
         (grpc.StatusCode.NOT_FOUND, NotFoundError),
         (grpc.StatusCode.INVALID_ARGUMENT, InvalidArgumentError),
+        (grpc.StatusCode.ALREADY_EXISTS, AlreadyExistsError),
         (grpc.StatusCode.DEADLINE_EXCEEDED, TimeoutError),
         (grpc.StatusCode.UNAVAILABLE, ServiceUnavailableError),
         (grpc.StatusCode.UNKNOWN, InternalServerError),

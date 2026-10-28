@@ -1,7 +1,7 @@
 use super::{App, AppState, ModalType, VectorListItem};
 use crate::constants::VECTOR_LIST_LIMIT;
 use crossterm::event::{Event, KeyCode, KeyEvent};
-use defs::{ContentType, Payload, SearchQueryInput, Similarity};
+use defs::{ContentType, DenseQuery, Payload, PointInput, QueryVector, SearchQuery, Similarity};
 use std::io;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -311,12 +311,14 @@ fn execute_modal_action(app: &mut App) -> io::Result<()> {
                 }
             };
 
-            let ids = db
-                .search(SearchQueryInput {
-                    vector: query,
-                    similarity: Similarity::Cosine,
+            let hits = db
+                .search(SearchQuery {
                     limit: k,
-                    ef: None,
+                    query: QueryVector::Dense(DenseQuery {
+                        vector: query,
+                        similarity: Similarity::Cosine,
+                        ef: None,
+                    }),
                 })
                 .map_err(to_io)?;
 
@@ -326,9 +328,9 @@ fn execute_modal_action(app: &mut App) -> io::Result<()> {
             app.vector_list_post_restore = false;
             app.vector_list_selected_index = 0;
 
-            for (id, _) in ids.into_iter() {
-                if let Some(point) = db.get(id).map_err(to_io)?
-                    && let Some(vector) = point.vector
+            for hit in hits {
+                if let Some(point) = db.get(hit.id).map_err(to_io)?
+                    && let Some(vector) = point.dense_vector
                 {
                     app.vector_list_items.push(VectorListItem {
                         id: point.id,
@@ -373,7 +375,14 @@ fn execute_modal_action(app: &mut App) -> io::Result<()> {
                         content: trimmed_text.to_string(),
                     };
 
-                    match db.insert(vector, payload).map_err(to_io) {
+                    let point = PointInput {
+                        id: None,
+                        dense_vector: Some(vector),
+                        sparse_vector: None,
+                        payload: Some(payload),
+                    };
+
+                    match db.insert(point).map_err(to_io) {
                         Ok(new_id) => app.modal.show_success(format!(
                             "Text embedding inserted (id={new_id}, {dims} dims)."
                         )),
@@ -424,7 +433,14 @@ fn execute_modal_action(app: &mut App) -> io::Result<()> {
                         content: trimmed_path.to_string(),
                     };
 
-                    match db.insert(vector, payload).map_err(to_io) {
+                    let point = PointInput {
+                        id: None,
+                        dense_vector: Some(vector),
+                        sparse_vector: None,
+                        payload: Some(payload),
+                    };
+
+                    match db.insert(point).map_err(to_io) {
                         Ok(new_id) => app.modal.show_success(format!(
                             "Image embedding inserted (id={new_id}, {dims} dims)."
                         )),
@@ -530,28 +546,29 @@ fn fetch_next_vector_page(app: &mut App) -> io::Result<bool> {
 
     let response = db.list(offset, VECTOR_LIST_LIMIT).map_err(to_io)?;
 
-    let Some((vectors, next_offset)) = response else {
+    let Some((points, next_offset)) = response else {
         app.vector_list_next_offset = None;
         return Ok(false);
     };
 
-    if vectors.is_empty() {
+    if points.is_empty() {
         app.vector_list_next_offset = None;
         return Ok(false);
     }
 
-    let vector_count = vectors.len();
+    let point_count = points.len();
 
-    for (id, vector) in vectors.into_iter() {
-        let payload = db.get(id).map_err(to_io)?.and_then(|p| p.payload);
-        app.vector_list_items.push(VectorListItem {
-            id,
-            vector,
-            payload,
-        });
+    for point in points {
+        if let Some(vector) = point.dense_vector {
+            app.vector_list_items.push(VectorListItem {
+                id: point.id,
+                vector,
+                payload: point.payload,
+            });
+        }
     }
 
-    if vector_count == VECTOR_LIST_LIMIT {
+    if point_count == VECTOR_LIST_LIMIT {
         app.vector_list_next_offset = Some(next_offset);
     } else {
         app.vector_list_next_offset = None;
@@ -616,7 +633,7 @@ fn show_vector_info(app: &mut App, id: Uuid) -> io::Result<()> {
     }
 
     let point = point_opt.unwrap();
-    let vector = point.vector.unwrap_or_default();
+    let vector = point.dense_vector.unwrap_or_default();
     let payload = point.payload;
 
     app.vector_detail = Some(VectorListItem {

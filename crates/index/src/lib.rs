@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use storage::StorageEngine;
 pub mod flat;
 pub mod hnsw;
+pub mod inverted;
 pub mod kd_tree;
 
 pub trait VectorIndex: Send + Sync + SerializableIndex {

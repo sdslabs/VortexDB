@@ -1,9 +1,15 @@
-from typing import List, Tuple
-
 from vortexdb import protoutils as proto
 from vortexdb.async_connection import AsyncGRPCConnection
 from vortexdb.config import VortexDBConfig
-from vortexdb.models import DenseVector, Payload, Point, Similarity, SearchQuery
+from vortexdb.models import (
+    DenseVector,
+    Payload,
+    Point,
+    PointInput,
+    SearchHit,
+    SearchQuery,
+    SparseVector,
+)
 
 
 class AsyncVortexDB:
@@ -25,42 +31,45 @@ class AsyncVortexDB:
 
         self._conn = AsyncGRPCConnection(self._config)
 
-    async def insert(self, *, vector: DenseVector, payload: Payload) -> str:
+    async def insert(
+        self,
+        *,
+        dense_vector: DenseVector | None = None,
+        sparse_vector: SparseVector | None = None,
+        payload: Payload | None = None,
+        point_id: str | None = None,
+    ) -> str:
         """
-        Insert a vector with payload.
+        Insert a point with a dense vector, a sparse vector or both.
         Returns: point_id (str)
         """
-        if not isinstance(vector, DenseVector):
-            raise TypeError(
-                "vector must be a DenseVector. Use: DenseVector([1.0, 2.0, 3.0])"
-            )
-
         request = proto.build_insert_request(
-            vector=vector,
-            payload=payload,
+            PointInput(
+                dense_vector=dense_vector,
+                sparse_vector=sparse_vector,
+                payload=payload,
+                point_id=point_id,
+            )
         )
 
         response = await self._conn.call(
-            self._conn.stub.InsertVector,
+            self._conn.stub.InsertPoint,
             request,
         )
 
         return response.id.value
 
-    async def batch_insert(
-        self, *, items: list[tuple[DenseVector, Payload]]
-    ) -> list[str]:
+    async def batch_insert(self, *, points: list[PointInput]) -> list[str]:
         """
-        Insert multiple vectors.
+        Insert multiple points.
         Returns: list of point_id (str)
         """
-        request = proto.build_batch_insert_request(items=items)
+        request = proto.build_batch_insert_request(points=points)
 
         response = await self._conn.call(
-            self._conn.stub.InsertVectorsBatch,
+            self._conn.stub.InsertPointsBatch,
             request,
         )
-
         return [pid.id.value for pid in response.ids]
 
     async def get(self, *, point_id: str) -> Point | None:
@@ -90,119 +99,34 @@ class AsyncVortexDB:
             request,
         )
 
-    async def search(
-        self,
-        *,
-        vector: DenseVector | None = None,
-        similarity: Similarity | None = None,
-        limit: int | None = None,
-        query: SearchQuery | None = None,
-        ef: int | None = None,
-    ) -> List[Tuple[str, float]]:
+    async def search(self, *, query: SearchQuery) -> list[SearchHit]:
         """
-        Search for nearest neighbors.
-        Returns: List of (point ID, score) tuples
+        Search with a dense or sparse query.
+        Returns: list of SearchHit (dense scores are distances, lower is better;
+        sparse scores are dot products, higher is better)
         """
-        if query is not None:
-            if not isinstance(query, SearchQuery):
-                raise TypeError("query must be a SearchQuery")
-            vector = query.vector
-            similarity = query.similarity
-            limit = query.limit
-        else:
-            if not isinstance(vector, DenseVector):
-                raise TypeError(
-                    "vector must be a DenseVector. Use: DenseVector([1.0, 2.0, 3.0])"
-                )
-            if not isinstance(similarity, Similarity):
-                raise TypeError("similarity must be a Similarity enum")
-            if not isinstance(limit, int):
-                raise TypeError("limit must be an int")
-
-        request = proto.build_search_request(
-            vector=vector,
-            similarity=similarity,
-            limit=limit,
-            ef=ef,
-        )
+        request = proto.build_search_request(query)
 
         response = await self._conn.call(
-            self._conn.stub.SearchPoints,
+            self._conn.stub.Search,
             request,
         )
-
-        return [
-            (pid.id.value, score)
-            for pid, score in zip(response.result_point_ids, response.scores)
-        ]
+        return proto.parse_search_response(response)
 
     async def batch_search(
-        self,
-        *,
-        queries,
-        similarity: Similarity | None = None,
-        limit: int | None = None,
-        ef: int | None = None,
-    ) -> List[List[Tuple[str, float]]]:
+        self, *, queries: list[SearchQuery]
+    ) -> list[list[SearchHit]]:
         """
-        Flexible batch search.
-
-        Accepts:
-        - List[SearchQuery]
-        - List[(DenseVector, Similarity, int)]
-        - List[(DenseVector, Similarity)] + global limit
-        - List[(DenseVector, int)] + global similarity
-        - List[DenseVector] + global similarity + limit
+        Run multiple dense and/or sparse queries in one call.
+        Returns: one list of SearchHit per query, in order
         """
-        normalized = []
+        request = proto.build_batch_search_request(queries=queries)
 
-        for i, q in enumerate(queries):
-            if (
-                hasattr(q, "vector")
-                and hasattr(q, "similarity")
-                and hasattr(q, "limit")
-            ):
-                normalized.append((q.vector, q.similarity, q.limit))
-                continue
-
-            if isinstance(q, DenseVector):
-                if similarity is None or limit is None:
-                    raise ValueError(
-                        f"queries[{i}] requires global similarity and limit"
-                    )
-                normalized.append((q, similarity, limit))
-                continue
-
-            if isinstance(q, (list, tuple)):
-                if len(q) == 3:
-                    normalized.append(q)
-                    continue
-                if len(q) == 2:
-                    a, b = q
-
-                    if isinstance(a, DenseVector) and isinstance(b, Similarity):
-                        if limit is None:
-                            raise ValueError(f"queries[{i}] missing global limit")
-                        normalized.append((a, b, limit))
-                        continue
-
-                    if isinstance(a, DenseVector) and isinstance(b, int):
-                        if similarity is None:
-                            raise ValueError(f"queries[{i}] missing global similarity")
-                        normalized.append((a, similarity, b))
-                        continue
-
-            raise TypeError(f"Invalid query format at index {i}")
-
-        request = proto.build_batch_search_request(queries=normalized, ef=ef)
-        response = await self._conn.call(self._conn.stub.SearchPointsBatch, request)
-        return [
-            [
-                (pid.id.value, score)
-                for pid, score in zip(result.result_point_ids, result.scores)
-            ]
-            for result in response.results
-        ]
+        response = await self._conn.call(
+            self._conn.stub.SearchBatch,
+            request,
+        )
+        return [proto.parse_search_response(result) for result in response.results]
 
     async def close(self) -> None:
         """

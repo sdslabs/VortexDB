@@ -58,7 +58,7 @@ The HTTP API requires an `api-key` header on every request under `/points`. `/` 
 curl -X POST "http://localhost:3000/points/search" \
   -H "api-key: your-api-key" \
   -H "Content-Type: application/json" \
-  -d '{"vector": [0.1, 0.2, 0.3], "similarity": "Cosine", "limit": 5}'
+  -d '{"limit": 5, "query": {"dense": {"vector": [0.1, 0.2, 0.3], "similarity": "Cosine"}}}'
 ```
 
 Keys come from the same `VORTEXDB_KEYS_FILE` used by gRPC (see [gRPC API](/api-reference/grpc)), but the HTTP API additionally enforces each key's role: `readonly` keys can fetch and search points; `readwrite` keys can also insert, batch-insert, and delete. A `readonly` key used against a write route gets `403 Forbidden`; a missing or unrecognized key gets `401 Unauthorized`.
@@ -69,12 +69,12 @@ Both APIs support the same core operations:
 
 | Operation | gRPC Method | HTTP Endpoint |
 |-----------|-------------|---------------|
-| Insert vector | `InsertVector` | `POST /points` |
-| Batch insert | `InsertVectorsBatch` | `POST /points/batch` |
+| Insert point | `InsertPoint` | `POST /points` |
+| Batch insert | `InsertPointsBatch` | `POST /points/batch` |
 | Get point | `GetPoint` | `GET /points/:id` |
 | Delete point | `DeletePoint` | `DELETE /points/:id` |
-| Search vectors | `SearchPoints` | `POST /points/search` |
-| Batch search | `SearchPointsBatch` | `POST /points/search/batch` |
+| Search (dense or sparse) | `Search` | `POST /points/search` |
+| Batch search | `SearchBatch` | `POST /points/search/batch` |
 | Health check | - | `GET /health` |
 
 ## Error Handling
@@ -86,6 +86,8 @@ Both APIs support the same core operations:
 | `0` | OK | Success |
 | `3` | INVALID_ARGUMENT | Invalid request parameters |
 | `5` | NOT_FOUND | Point not found |
+| `6` | ALREADY_EXISTS | Point id already exists |
+| `7` | PERMISSION_DENIED | `readonly` key called a write RPC |
 | `13` | INTERNAL | Server error |
 | `16` | UNAUTHENTICATED | Invalid or missing API key |
 
@@ -98,13 +100,14 @@ Both APIs support the same core operations:
 | `204` | No Content (for delete) |
 | `400` | Bad Request |
 | `404` | Not Found |
+| `409` | Conflict (point id already exists) |
 | `500` | Internal Server Error |
 
 ## Data Types
 
-### Vector
+### Vectors
 
-A dense vector of floating-point values:
+A point holds a dense vector, a sparse vector, or both. A dense vector is a list of floats whose length matches `DIMENSION`:
 
 <Tabs>
   <Tab title="gRPC (Protobuf)">
@@ -117,11 +120,35 @@ A dense vector of floating-point values:
   <Tab title="HTTP (JSON)">
     ```json
     {
-      "vector": [0.1, 0.2, 0.3, 0.4]
+      "dense_vector": [0.1, 0.2, 0.3, 0.4]
     }
     ```
   </Tab>
 </Tabs>
+
+A sparse vector stores only its non-zero entries, for example from a SPLADE or BM25 encoder. Token ids must be strictly increasing and each weight must be finite and non-negative:
+
+<Tabs>
+  <Tab title="gRPC (Protobuf)">
+    ```protobuf
+    message SparseVector {
+      repeated uint32 token_ids = 1;
+      repeated float weights = 2;
+    }
+    ```
+  </Tab>
+  <Tab title="HTTP (JSON)">
+    ```json
+    {
+      "sparse_vector": {"token_ids": [3, 17, 42], "weights": [0.5, 1.2, 0.8]}
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Search Scores
+
+Every search hit carries a raw score. Dense queries return a distance for the chosen similarity, so lower is closer. Sparse queries return a dot product, so higher is closer. Hits are always ordered best first.
 
 ### Payload
 

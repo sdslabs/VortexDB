@@ -24,7 +24,6 @@ pub enum DbError {
     PointNotFound { id: PointId },
 }
 
-use axum::{http::StatusCode, response::IntoResponse};
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
@@ -36,20 +35,23 @@ pub enum ServerError {
     Serve { source: io::Error },
 }
 
-#[derive(Debug)]
-pub enum AppError {
-    ServerError(ServerError),
-    Api(String),
-}
-
-impl IntoResponse for AppError {
-    fn into_response(self) -> axum::response::Response {
-        let (status, message) = match self {
-            AppError::Api(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::ServerError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-        };
-        (status, message).into_response()
-    }
-}
 // Error type for server
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+#[derive(Debug, Snafu)]
+pub enum SparseError {
+    #[snafu(display("token_ids length {ids} does not match weights length {weights}"))]
+    LengthMismatch { ids: usize, weights: usize },
+
+    #[snafu(display("sparse vector must not be empty"))]
+    Empty,
+
+    #[snafu(display("token_ids must be strictly increasing, violated at index {index}"))]
+    UnsortedTokenIds { index: usize },
+
+    #[snafu(display("weight at index {index} is not finite"))]
+    NonFiniteWeight { index: usize },
+
+    #[snafu(display("weight at index {index} is negative"))]
+    NegativeWeight { index: usize },
+}

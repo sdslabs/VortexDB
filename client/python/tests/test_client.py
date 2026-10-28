@@ -3,8 +3,18 @@ from unittest.mock import Mock
 
 from vortexdb.client import VortexDB
 from vortexdb.connection import GRPCConnection
-from vortexdb.models import DenseVector, Payload, Similarity, ContentType, Point
-from vortexdb.models import SearchQuery
+from vortexdb.grpc import vector_db_pb2 as pb
+from vortexdb.models import (
+    DenseQuery,
+    DenseVector,
+    Payload,
+    Point,
+    PointInput,
+    SearchHit,
+    SearchQuery,
+    Similarity,
+    SparseVector,
+)
 
 
 # Fixtures for a mock connection and client layer
@@ -31,84 +41,98 @@ def client(mock_connection):
 # Insert
 
 
-def test_insert_success(client, mock_connection):
-    response = Mock()
-    response.id = Mock()
-    response.id.value = "point-123"
+def test_insert_dense_point(client, mock_connection):
+    mock_connection.call.return_value = pb.PointID(id=pb.UUID(value="point-123"))
 
-    mock_connection.call.return_value = response
-
-    vector = DenseVector([1, 2, 3])
-    payload = Payload.text("hello")
-
-    point_id = client.insert(vector=vector, payload=payload)
+    point_id = client.insert(
+        dense_vector=DenseVector([1, 2, 3]),
+        payload=Payload.text("hello"),
+    )
 
     assert point_id == "point-123"
+    request = mock_connection.call.call_args.args[1]
+    assert list(request.dense_vector.values) == [1.0, 2.0, 3.0]
+    assert not request.HasField("sparse_vector")
+    assert not request.HasField("id")
+
+
+def test_insert_sparse_point_with_id(client, mock_connection):
+    mock_connection.call.return_value = pb.PointID(id=pb.UUID(value="point-1"))
+
+    client.insert(
+        sparse_vector=SparseVector([1, 5], [0.5, 2.0]),
+        point_id="point-1",
+    )
+
+    request = mock_connection.call.call_args.args[1]
+    assert request.id.id.value == "point-1"
+    assert list(request.sparse_vector.token_ids) == [1, 5]
+    assert not request.HasField("dense_vector")
 
 
 def test_insert_rejects_invalid_vector(client):
     with pytest.raises(TypeError):
         client.insert(
-            vector=[1, 2, 3],  # not DenseVector
+            dense_vector=[1, 2, 3],  # not DenseVector
             payload=Payload.text("hello"),
         )
+
+
+def test_insert_rejects_point_without_vectors(client):
+    with pytest.raises(ValueError):
+        client.insert(payload=Payload.text("hello"))
 
 
 # Batch Insert
 
 
 def test_batch_insert_success(client, mock_connection):
-    response = Mock()
-    response.ids = [
-        Mock(id=Mock(value="p1")),
-        Mock(id=Mock(value="p2")),
+    mock_connection.call.return_value = pb.InsertPointsBatchResponse(
+        ids=[pb.PointID(id=pb.UUID(value="p1")), pb.PointID(id=pb.UUID(value="p2"))]
+    )
+    points = [
+        PointInput(dense_vector=DenseVector([1, 2, 3]), payload=Payload.text("a")),
+        PointInput(sparse_vector=SparseVector([2], [1.0])),
     ]
-    mock_connection.call.return_value = response
-    items = [
-        (DenseVector([1, 2, 3]), Payload.text("a")),
-        (DenseVector([4, 5, 6]), Payload.text("b")),
-    ]
-    result = client.batch_insert(items=items)
+
+    result = client.batch_insert(points=points)
+
     assert result == ["p1", "p2"]
+    request = mock_connection.call.call_args.args[1]
+    assert len(request.points) == 2
 
 
-def test_batch_insert_invalid_items_type(client):
+def test_batch_insert_invalid_points_type(client):
     with pytest.raises(TypeError):
-        client.batch_insert(items="not-a-list")
+        client.batch_insert(points="not-a-list")
 
 
-def test_batch_insert_invalid_tuple_structure(client):
-    items = [
-        (DenseVector([1, 2, 3]),),  # only one element
-    ]
+def test_batch_insert_rejects_non_point_input(client):
     with pytest.raises(TypeError):
-        client.batch_insert(items=items)
+        client.batch_insert(points=[(DenseVector([1, 2, 3]), Payload.text("a"))])
 
 
-def test_batch_insert_invalid_vector(client):
-    items = [
-        ([1, 2, 3], Payload.text("a")),  # not DenseVector
-    ]
-    with pytest.raises(TypeError):
-        client.batch_insert(items=items)
+def test_batch_insert_rejects_empty(client):
+    with pytest.raises(ValueError):
+        client.batch_insert(points=[])
 
 
 # Get
 
 
 def test_get_point_success(client, mock_connection):
-    proto_point = Mock()
-    proto_point.id.id.value = "point-123"
-    proto_point.vector.values = [1, 2, 3]
-    proto_point.payload.content_type = ContentType.TEXT.to_proto()
-    proto_point.payload.content = "hello"
-
-    mock_connection.call.return_value = proto_point
+    mock_connection.call.return_value = pb.Point(
+        id=pb.PointID(id=pb.UUID(value="point-123")),
+        sparse_vector=pb.SparseVector(token_ids=[1, 4], weights=[0.5, 2.0]),
+        payload=pb.Payload(content_type=pb.Text, content="hello"),
+    )
 
     point = client.get(point_id="point-123")
 
     assert isinstance(point, Point)
     assert point.id == "point-123"
+    assert point.dense_vector is None
+    assert point.sparse_vector == SparseVector([1, 4], [0.5, 2.0])
     assert point.payload.content == "hello"
 
 
@@ -134,142 +158,74 @@ def test_delete_success(client, mock_connection):
 # Search
 
 
-def test_search_success(client, mock_connection):
-    mock_connection.call.return_value = Mock(
-        result_point_ids=[
-            Mock(id=Mock(value="p1")),
-            Mock(id=Mock(value="p2")),
-        ],
-        scores=[0.1, 0.2],
+def test_dense_search_success(client, mock_connection):
+    mock_connection.call.return_value = pb.SearchResponse(
+        hits=[
+            pb.SearchHit(id=pb.PointID(id=pb.UUID(value="p1")), score=0.25),
+            pb.SearchHit(id=pb.PointID(id=pb.UUID(value="p2")), score=0.5),
+        ]
+    )
+    query = SearchQuery(
+        limit=2, query=DenseQuery(DenseVector([1, 2, 3]), Similarity.COSINE, ef=128)
     )
 
-    results = client.search(
-        vector=DenseVector([1, 2, 3]),
-        similarity=Similarity.COSINE,
-        limit=2,
-    )
+    results = client.search(query=query)
 
-    assert results == [("p1", 0.1), ("p2", 0.2)]
-
-
-def test_search_accepts_ef(client, mock_connection):
-    mock_connection.call.return_value = Mock(result_point_ids=[], scores=[])
-
-    client.search(
-        vector=DenseVector([1, 2, 3]),
-        similarity=Similarity.COSINE,
-        limit=2,
-        ef=128,
-    )
-
+    assert results == [SearchHit("p1", 0.25), SearchHit("p2", 0.5)]
     request = mock_connection.call.call_args.args[1]
-    assert request.ef == 128
+    assert request.limit == 2
+    assert request.dense.ef == 128
 
 
-def test_search_invalid_vector(client):
+def test_sparse_search_success(client, mock_connection):
+    mock_connection.call.return_value = pb.SearchResponse(
+        hits=[pb.SearchHit(id=pb.PointID(id=pb.UUID(value="p1")), score=2.0)]
+    )
+
+    results = client.search(query=SearchQuery(limit=5, query=SparseVector([4], [1.0])))
+
+    assert results == [SearchHit("p1", 2.0)]
+    request = mock_connection.call.call_args.args[1]
+    assert request.WhichOneof("query") == "sparse"
+
+
+def test_search_rejects_non_search_query(client):
     with pytest.raises(TypeError):
-        client.search(
-            vector=[1, 2, 3],
-            similarity=Similarity.COSINE,
-            limit=2,
-        )
-
-
-def test_batch_search_accepts_ef(client, mock_connection):
-    mock_connection.call.return_value = Mock(results=[])
-
-    client.batch_search(
-        queries=[
-            (DenseVector([1, 2, 3]), Similarity.COSINE, 2),
-            (DenseVector([4, 5, 6]), Similarity.COSINE, 1),
-        ],
-        ef=256,
-    )
-
-    request = mock_connection.call.call_args.args[1]
-    assert [query.ef for query in request.queries] == [256, 256]
+        client.search(query=DenseVector([1, 2, 3]))
 
 
 # Batch Search
 
 
-def test_batch_search_full_tuple(client, mock_connection):
-    mock_connection.call.return_value = Mock(
+def test_batch_search_mixes_dense_and_sparse(client, mock_connection):
+    mock_connection.call.return_value = pb.SearchBatchResponse(
         results=[
-            Mock(result_point_ids=[Mock(id=Mock(value="p1"))], scores=[0.5]),
-            Mock(result_point_ids=[Mock(id=Mock(value="p2"))], scores=[0.5]),
+            pb.SearchResponse(
+                hits=[pb.SearchHit(id=pb.PointID(id=pb.UUID(value="p1")), score=0.5)]
+            ),
+            pb.SearchResponse(),
         ]
     )
     queries = [
-        (DenseVector([1, 2, 3]), Similarity.COSINE, 2),
-        (DenseVector([4, 5, 6]), Similarity.EUCLIDEAN, 1),
+        SearchQuery(2, DenseQuery(DenseVector([1, 2, 3]), Similarity.EUCLIDEAN)),
+        SearchQuery(1, SparseVector([7], [1.0])),
     ]
+
     result = client.batch_search(queries=queries)
-    assert result == [[("p1", 0.5)], [("p2", 0.5)]]
+
+    assert result == [[SearchHit("p1", 0.5)], []]
+    request = mock_connection.call.call_args.args[1]
+    assert [q.WhichOneof("query") for q in request.queries] == ["dense", "sparse"]
 
 
-def test_batch_search_vectors_with_global_params(client, mock_connection):
-    mock_connection.call.return_value = Mock(
-        results=[
-            Mock(result_point_ids=[Mock(id=Mock(value="p1"))], scores=[0.5]),
-        ]
-    )
-    queries = [DenseVector([1, 2, 3])]
-    result = client.batch_search(
-        queries=queries,
-        similarity=Similarity.MANHATTAN,
-        limit=2,
-    )
-    assert result == [[("p1", 0.5)]]
-
-
-def test_batch_search_vector_similarity_with_global_limit(client, mock_connection):
-    mock_connection.call.return_value = Mock(
-        results=[
-            Mock(result_point_ids=[Mock(id=Mock(value="p1"))], scores=[0.5]),
-        ]
-    )
-    queries = [
-        (DenseVector([1, 2, 3]), Similarity.COSINE),
-    ]
-    result = client.batch_search(
-        queries=queries,
-        limit=2,
-    )
-    assert result == [[("p1", 0.5)]]
-
-
-def test_batch_search_searchquery_objects(client, mock_connection):
-    mock_connection.call.return_value = Mock(
-        results=[
-            Mock(result_point_ids=[Mock(id=Mock(value="p1"))], scores=[0.5]),
-        ]
-    )
-    queries = [
-        SearchQuery(DenseVector([1, 2, 3]), Similarity.COSINE, 2),
-    ]
-    result = client.batch_search(queries=queries)
-    assert result == [[("p1", 0.5)]]
-
-
-def test_batch_search_missing_globals_for_vector(client):
-    queries = [DenseVector([1, 2, 3])]
-    with pytest.raises(ValueError):
-        client.batch_search(queries=queries)
-
-
-def test_batch_search_missing_limit(client):
-    queries = [
-        (DenseVector([1, 2, 3]), Similarity.COSINE),
-    ]
-    with pytest.raises(ValueError):
-        client.batch_search(queries=queries)
-
-
-def test_batch_search_invalid_format(client):
-    queries = ["invalid"]
+def test_batch_search_rejects_invalid_format(client):
     with pytest.raises(TypeError):
-        client.batch_search(queries=queries)
+        client.batch_search(queries=["invalid"])
+
+
+def test_batch_search_rejects_empty(client):
+    with pytest.raises(ValueError):
+        client.batch_search(queries=[])
 
 
 # Close

@@ -1,8 +1,8 @@
 use crate::StorageType;
 use crate::error::StorageError;
-use crate::{StorageEngine, VectorPage, checkpoint::StorageCheckpoint};
+use crate::{PointPage, StorageEngine, checkpoint::StorageCheckpoint};
 use bincode::{deserialize_from, serialize_into};
-use defs::{DenseVector, Payload, Point, PointId};
+use defs::{DenseVector, Payload, Point, PointId, SparseVector};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -39,6 +39,7 @@ impl StorageEngine for MemoryStorage {
         &self,
         id: PointId,
         vector: Option<DenseVector>,
+        sparse_vector: Option<SparseVector>,
         payload: Option<Payload>,
     ) -> Result<(), StorageError> {
         let mut points = self
@@ -49,7 +50,8 @@ impl StorageEngine for MemoryStorage {
             id,
             Point {
                 id,
-                vector,
+                dense_vector: vector,
+                sparse_vector,
                 payload,
             },
         );
@@ -70,25 +72,25 @@ impl StorageEngine for MemoryStorage {
         points.remove(&id);
         Ok(())
     }
-    fn get_payload(&self, id: PointId) -> Result<Option<Payload>, StorageError> {
+    fn get_point(&self, id: PointId) -> Result<Option<Point>, StorageError> {
         let points = self
             .points
             .read()
             .map_err(|_| StorageError::InMemoryLock {})?;
-        Ok(points.get(&id).and_then(|point| point.payload.clone()))
+        Ok(points.get(&id).cloned())
     }
     fn get_vector(&self, id: PointId) -> Result<Option<DenseVector>, StorageError> {
         let points = self
             .points
             .read()
             .map_err(|_| StorageError::InMemoryLock {})?;
-        Ok(points.get(&id).and_then(|point| point.vector.clone()))
+        Ok(points.get(&id).and_then(|point| point.dense_vector.clone()))
     }
-    fn list_vectors(
+    fn list_points(
         &self,
         offset: PointId,
         limit: usize,
-    ) -> Result<Option<VectorPage>, StorageError> {
+    ) -> Result<Option<PointPage>, StorageError> {
         if limit < 1 {
             return Ok(None);
         }
@@ -97,18 +99,12 @@ impl StorageEngine for MemoryStorage {
             .points
             .read()
             .map_err(|_| StorageError::InMemoryLock {})?;
-        let mut result = Vec::with_capacity(limit);
-        let mut last_id = offset;
-
-        for (id, point) in points.range((Excluded(offset), Unbounded)) {
-            if let Some(vector) = &point.vector {
-                last_id = *id;
-                result.push((*id, vector.clone()));
-                if result.len() == limit {
-                    break;
-                }
-            }
-        }
+        let result: Vec<Point> = points
+            .range((Excluded(offset), Unbounded))
+            .take(limit)
+            .map(|(_, point)| point.clone())
+            .collect();
+        let last_id = result.last().map_or(offset, |point| point.id);
 
         Ok(Some((result, last_id)))
     }

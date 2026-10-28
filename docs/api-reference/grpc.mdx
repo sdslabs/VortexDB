@@ -25,10 +25,10 @@ grpcurl -plaintext localhost:50051 list
 All gRPC calls require the `authorization` header with your API key:
 
 ```bash
--H "authorization: your-api-key"
+-H "authorization: Bearer your-api-key"
 ```
 
-Valid keys come from the JSON file pointed to by the `VORTEXDB_KEYS_FILE` environment variable, shared with the HTTP server. `readonly` keys can call `GetPoint`, `SearchPoints`, and `SearchPointsBatch`; `readwrite` keys can additionally call `InsertVector`, `InsertVectorsBatch`, and `DeletePoint`. A `readonly` key calling a write RPC gets a `PERMISSION_DENIED` status.
+Valid keys come from the JSON file pointed to by the `VORTEXDB_KEYS_FILE` environment variable, shared with the HTTP server. `readonly` keys can call `GetPoint`, `Search`, and `SearchBatch`; `readwrite` keys can additionally call `InsertPoint`, `InsertPointsBatch`, and `DeletePoint`. A `readonly` key calling a write RPC gets a `PERMISSION_DENIED` status.
 
 ---
 
@@ -39,12 +39,12 @@ syntax = "proto3";
 package vectordb;
 
 service VectorDB {
-  rpc InsertVector(InsertVectorRequest) returns (PointID);
-  rpc InsertVectorsBatch(InsertVectorsBatchRequest) returns (InsertVectorsBatchResponse);
+  rpc InsertPoint(PointInput) returns (PointID);
+  rpc InsertPointsBatch(InsertPointsBatchRequest) returns (InsertPointsBatchResponse);
   rpc DeletePoint(PointID) returns (google.protobuf.Empty);
   rpc GetPoint(PointID) returns (Point);
-  rpc SearchPoints(SearchRequest) returns (SearchResponse);
-  rpc SearchPointsBatch(SearchPointsBatchRequest) returns (SearchPointsBatchResponse);
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc SearchBatch(SearchBatchRequest) returns (SearchBatchResponse);
 }
 ```
 
@@ -52,55 +52,50 @@ service VectorDB {
 
 ## Methods
 
-### InsertVector
+### InsertPoint
 
-Insert a vector with its associated payload.
+Insert a point with a dense vector, a sparse vector, or both. At least one is required.
 
-<ParamField body="vector" type="DenseVector" required>
-  The vector to insert. Must match the configured `DIMENSION`.
+<ParamField body="id" type="PointID">
+  Optional id. Generated when unset. An id that already exists returns `ALREADY_EXISTS`.
 </ParamField>
 
-<ParamField body="payload" type="Payload" required>
-  Metadata associated with the vector.
+<ParamField body="dense_vector" type="DenseVector">
+  Must match the configured `DIMENSION`.
+</ParamField>
+
+<ParamField body="sparse_vector" type="SparseVector">
+  Non-empty, strictly increasing `token_ids` with one finite, non-negative weight each.
+</ParamField>
+
+<ParamField body="payload" type="Payload">
+  Optional metadata.
 </ParamField>
 
 **Request:**
 
 ```protobuf
-message InsertVectorRequest {
-  DenseVector vector = 1;
-  Payload payload = 2;
+message PointInput {
+  PointID id = 1;
+  DenseVector dense_vector = 2;
+  SparseVector sparse_vector = 3;
+  Payload payload = 4;
 }
 ```
 
-**Response:**
-
-```protobuf
-message PointID {
-  UUID id = 1;
-}
-```
+**Response:** `PointID` of the created point.
 
 **Example:**
 
 ```bash
 grpcurl -plaintext \
-  -H "authorization: secret" \
+  -H "authorization: Bearer your-api-key" \
   -d '{
-    "vector": {"values": [0.1, 0.2, 0.3, 0.4]},
-    "payload": {"content_type": 1, "content": "Hello world"}
+    "dense_vector": {"values": [0.1, 0.2, 0.3, 0.4]},
+    "sparse_vector": {"token_ids": [3, 17, 42], "weights": [0.5, 1.2, 0.8]},
+    "payload": {"content_type": "Text", "content": "Hello, VortexDB!"}
   }' \
-  localhost:50051 vectordb.VectorDB/InsertVector
-```
-
-**Response:**
-
-```json
-{
-  "id": {
-    "value": "550e8400-e29b-41d4-a716-446655440000"
-  }
-}
+  localhost:50051 vectordb.VectorDB/InsertPoint
 ```
 
 ---
@@ -109,125 +104,66 @@ grpcurl -plaintext \
 
 Retrieve a point by its ID.
 
-<ParamField body="id" type="UUID" required>
-  The unique identifier of the point.
-</ParamField>
-
-**Request:**
-
-```protobuf
-message PointID {
-  UUID id = 1;
-}
-```
+**Request:** `PointID`
 
 **Response:**
 
 ```protobuf
 message Point {
   PointID id = 1;
-  Payload payload = 2;
-  DenseVector vector = 3;
+  Payload payload = 2;            // unset if the point has no payload
+  DenseVector dense_vector = 3;   // unset if the point has no dense vector
+  SparseVector sparse_vector = 4; // unset if the point has no sparse vector
 }
 ```
 
-**Example:**
+Returns `NOT_FOUND` if the point does not exist.
 
 ```bash
 grpcurl -plaintext \
-  -H "authorization: secret" \
+  -H "authorization: Bearer your-api-key" \
   -d '{"id": {"value": "550e8400-e29b-41d4-a716-446655440000"}}' \
   localhost:50051 vectordb.VectorDB/GetPoint
-```
-
-**Response:**
-
-```json
-{
-  "id": {
-    "id": {
-      "value": "550e8400-e29b-41d4-a716-446655440000"
-    }
-  },
-  "payload": {
-    "contentType": "Text",
-    "content": "Hello world"
-  },
-  "vector": {
-    "values": [0.1, 0.2, 0.3, 0.4]
-  }
-}
 ```
 
 ---
 
 ### DeletePoint
 
-Delete a point by its ID.
+Delete a point by its ID. The point is removed from both the dense and the sparse index.
 
-<ParamField body="id" type="UUID" required>
-  The unique identifier of the point to delete.
-</ParamField>
+**Request:** `PointID`
 
-**Request:**
-
-```protobuf
-message PointID {
-  UUID id = 1;
-}
-```
-
-**Response:**
-
-```protobuf
-google.protobuf.Empty
-```
-
-**Example:**
+**Response:** `google.protobuf.Empty`
 
 ```bash
 grpcurl -plaintext \
-  -H "authorization: secret" \
+  -H "authorization: Bearer your-api-key" \
   -d '{"id": {"value": "550e8400-e29b-41d4-a716-446655440000"}}' \
   localhost:50051 vectordb.VectorDB/DeletePoint
 ```
 
-**Response:**
-
-```json
-{}
-```
-
 ---
 
-### SearchPoints
+### Search
 
-Search for the k nearest neighbors to a query vector.
-
-<ParamField body="query_vector" type="DenseVector" required>
-  The vector to search with. Must match the configured `DIMENSION`.
-</ParamField>
-
-<ParamField body="similarity" type="Similarity" required>
-  The distance metric to use.
-</ParamField>
-
-<ParamField body="limit" type="uint64" required>
-  Maximum number of results to return.
-</ParamField>
-
-<ParamField body="ef" type="uint64">
-  Search breadth for HNSW. Larger values trade speed for accuracy. Defaults to the server's `HNSW_EF` setting.
-</ParamField>
+Find the nearest points to a dense or a sparse query. Exactly one of `dense` or `sparse` must be set.
 
 **Request:**
 
 ```protobuf
 message SearchRequest {
-  DenseVector query_vector = 1;
+  uint64 limit = 1;
+  oneof query {
+    DenseQuery dense = 2;
+    SparseVector sparse = 3;
+  }
+}
+
+message DenseQuery {
+  DenseVector vector = 1;
   Similarity similarity = 2;
-  uint64 limit = 3;
-  uint64 ef = 4;
+  optional uint64 ef = 3;  // HNSW search breadth, ignored by other indexes
 }
 ```
 
@@ -235,105 +171,85 @@ message SearchRequest {
 
 ```protobuf
 message SearchResponse {
-  repeated PointID result_point_ids = 1;
+  repeated SearchHit hits = 1;  // best first
+}
+
+message SearchHit {
+  PointID id = 1;
+  float score = 2;
 }
 ```
 
-**Example:**
+Dense queries return a distance as the score (lower is closer). Sparse queries return a dot product (higher is closer).
 
 ```bash
+# Dense
 grpcurl -plaintext \
-  -H "authorization: secret" \
-  -d '{
-    "query_vector": {"values": [0.1, 0.2, 0.3, 0.4]},
-    "similarity": 3,
-    "limit": 5,
-    "ef": 200
-  }' \
-  localhost:50051 vectordb.VectorDB/SearchPoints
-```
+  -H "authorization: Bearer your-api-key" \
+  -d '{"limit": 5, "dense": {"vector": {"values": [0.1, 0.2, 0.3, 0.4]}, "similarity": "Cosine"}}' \
+  localhost:50051 vectordb.VectorDB/Search
 
-**Response:**
-
-```json
-{
-  "resultPointIds": [
-    {"id": {"value": "550e8400-e29b-41d4-a716-446655440000"}},
-    {"id": {"value": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"}}
-  ]
-}
+# Sparse
+grpcurl -plaintext \
+  -H "authorization: Bearer your-api-key" \
+  -d '{"limit": 5, "sparse": {"token_ids": [3, 17], "weights": [1.0, 0.5]}}' \
+  localhost:50051 vectordb.VectorDB/Search
 ```
 
 ---
 
-### InsertVectorsBatch
+### InsertPointsBatch
 
-Insert multiple vectors in a single request.
-
-**Request:**
+Insert multiple points in one call. The whole batch is validated before anything is written, so one invalid point rejects the batch.
 
 ```protobuf
-message InsertVectorsBatchRequest {
-  repeated InsertVectorRequest vectors = 1;
+message InsertPointsBatchRequest {
+  repeated PointInput points = 1;
+}
+
+message InsertPointsBatchResponse {
+  repeated PointID ids = 1;  // in input order
 }
 ```
-
-**Response:**
-
-```protobuf
-message InsertVectorsBatchResponse {
-  repeated PointID ids = 1;
-}
-```
-
-**Example:**
 
 ```bash
 grpcurl -plaintext \
-  -H "authorization: secret" \
+  -H "authorization: Bearer your-api-key" \
   -d '{
-    "vectors": [
-      {"vector": {"values": [0.1, 0.2, 0.3]}, "payload": {"content_type": 1, "content": "doc one"}},
-      {"vector": {"values": [0.4, 0.5, 0.6]}, "payload": {"content_type": 1, "content": "doc two"}}
+    "points": [
+      {"dense_vector": {"values": [0.1, 0.2, 0.3, 0.4]}, "payload": {"content_type": "Text", "content": "doc one"}},
+      {"sparse_vector": {"token_ids": [2, 9], "weights": [1.0, 0.25]}}
     ]
   }' \
-  localhost:50051 vectordb.VectorDB/InsertVectorsBatch
+  localhost:50051 vectordb.VectorDB/InsertPointsBatch
 ```
 
 ---
 
-### SearchPointsBatch
+### SearchBatch
 
-Search against multiple query vectors in a single request.
-
-**Request:**
+Run multiple queries in one call. Dense and sparse queries can be mixed.
 
 ```protobuf
-message SearchPointsBatchRequest {
+message SearchBatchRequest {
   repeated SearchRequest queries = 1;
 }
-```
 
-**Response:**
-
-```protobuf
-message SearchPointsBatchResponse {
-  repeated SearchResponse results = 1;
+message SearchBatchResponse {
+  repeated SearchResponse results = 1;  // one per query, in order
 }
 ```
 
-**Example:**
-
 ```bash
 grpcurl -plaintext \
-  -H "authorization: secret" \
+  -H "authorization: Bearer your-api-key" \
   -d '{
     "queries": [
-      {"query_vector": {"values": [0.1, 0.2, 0.3]}, "similarity": 3, "limit": 2},
-      {"query_vector": {"values": [0.4, 0.5, 0.6]}, "similarity": 0, "limit": 2}
+      {"limit": 2, "dense": {"vector": {"values": [0.1, 0.2, 0.3, 0.4]}, "similarity": "Cosine"}},
+      {"limit": 2, "sparse": {"token_ids": [3, 17], "weights": [1.0, 0.5]}}
     ]
   }' \
-  localhost:50051 vectordb.VectorDB/SearchPointsBatch
+  localhost:50051 vectordb.VectorDB/SearchBatch
 ```
 
 ---
@@ -344,25 +260,7 @@ grpcurl -plaintext \
 
 ```protobuf
 message UUID {
-  string value = 1;  // UUID v4 string
-}
-```
-
-### DenseVector
-
-```protobuf
-message DenseVector {
-  repeated float values = 1;  // Vector components
-}
-```
-
-### Point
-
-```protobuf
-message Point {
-  PointID id = 1;        // Unique identifier
-  Payload payload = 2;   // Associated metadata
-  DenseVector vector = 3; // Vector values
+  string value = 1;  // UUID string
 }
 ```
 
@@ -374,12 +272,29 @@ message PointID {
 }
 ```
 
+### DenseVector
+
+```protobuf
+message DenseVector {
+  repeated float values = 1;
+}
+```
+
+### SparseVector
+
+```protobuf
+message SparseVector {
+  repeated uint32 token_ids = 1;  // strictly increasing
+  repeated float weights = 2;     // one per token id
+}
+```
+
 ### Payload
 
 ```protobuf
 message Payload {
-  ContentType content_type = 1;  // Type of content
-  string content = 2;            // Content string
+  ContentType content_type = 1;
+  string content = 2;
 }
 ```
 
@@ -414,8 +329,10 @@ Type of payload content.
 | gRPC Code | Name | Description |
 |-----------|------|-------------|
 | `0` | `OK` | Success |
-| `3` | `INVALID_ARGUMENT` | Invalid request (e.g., wrong dimensions) |
+| `3` | `INVALID_ARGUMENT` | Invalid request (wrong dimension, invalid sparse vector, no vector, missing query, malformed id) |
 | `5` | `NOT_FOUND` | Point does not exist |
+| `6` | `ALREADY_EXISTS` | A point with this id already exists |
+| `7` | `PERMISSION_DENIED` | `readonly` key called a write RPC |
 | `13` | `INTERNAL` | Server error |
 | `16` | `UNAUTHENTICATED` | Invalid or missing API key |
 
@@ -426,28 +343,32 @@ Type of payload content.
 ### Python
 
 ```python
-from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb import (
+    VortexDB, DenseQuery, DenseVector, Payload, PointInput, SearchQuery, Similarity, SparseVector,
+)
 
 with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
     # Insert
     point_id = db.insert(
-        vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
-        payload=Payload.text("Hello")
+        dense_vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+        sparse_vector=SparseVector([3, 17], [0.5, 1.2]),
+        payload=Payload.text("Hello"),
     )
 
     # Batch insert
-    ids = db.batch_insert(items=[
-        (DenseVector([0.1, 0.2, 0.3]), Payload.text("doc one")),
-        (DenseVector([0.4, 0.5, 0.6]), Payload.text("doc two")),
+    ids = db.batch_insert(points=[
+        PointInput(dense_vector=DenseVector([0.1, 0.2, 0.3, 0.4]), payload=Payload.text("doc one")),
+        PointInput(sparse_vector=SparseVector([2, 9], [1.0, 0.25])),
     ])
 
-    # Search with ef parameter
-    results = db.search(
-        vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
-        similarity=Similarity.COSINE,
+    # Dense search with ef parameter
+    hits = db.search(query=SearchQuery(
         limit=5,
-        ef=200,
-    )
+        query=DenseQuery(DenseVector([0.1, 0.2, 0.3, 0.4]), Similarity.COSINE, ef=200),
+    ))
+
+    # Sparse search
+    hits = db.search(query=SearchQuery(limit=5, query=SparseVector([3], [1.0])))
 ```
 
 ### Generate Clients

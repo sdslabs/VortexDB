@@ -5,8 +5,8 @@ use axum::{
     http::StatusCode,
 };
 use defs::{
-    AppError, BatchInsertRequest, BatchInsertResponse, BatchSearchRequest, BatchSearchResponse,
-    DenseVector, Payload, Point, PointId, SearchQueryInput, SearchResponse,
+    BatchInsertRequest, BatchInsertResponse, BatchSearchRequest, BatchSearchResponse, Point,
+    PointId, PointInput, SearchQuery, SearchResponse,
 };
 use index::error::IndexError;
 use serde::{Deserialize, Serialize};
@@ -14,12 +14,6 @@ use storage::error::StorageError;
 use tracing::error;
 
 use crate::AppState;
-
-#[derive(Deserialize, Debug)]
-pub struct InsertRequest {
-    pub vector: DenseVector,
-    pub payload: Payload,
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct InsertResponse {
@@ -36,9 +30,9 @@ pub async fn health_handler() -> &'static str {
 
 pub async fn insert_point_handler(
     State(app_state): State<AppState>,
-    Json(request): Json<InsertRequest>,
+    Json(request): Json<PointInput>,
 ) -> Result<(StatusCode, Json<InsertResponse>), (StatusCode, String)> {
-    match app_state.db.insert(request.vector, request.payload) {
+    match app_state.db.insert(request) {
         Ok(point_id) => {
             let response = InsertResponse { point_id };
             Ok((StatusCode::CREATED, Json(response)))
@@ -53,11 +47,11 @@ pub async fn insert_point_handler(
 pub async fn batch_insert_handler(
     State(state): State<AppState>,
     Json(request): Json<BatchInsertRequest>,
-) -> Result<Json<BatchInsertResponse>, AppError> {
-    let ids = state
-        .db
-        .insert_batch(request.points)
-        .map_err(|e| AppError::Api(e.to_string()))?;
+) -> Result<Json<BatchInsertResponse>, (StatusCode, String)> {
+    let ids = state.db.insert_batch(request.points).map_err(|e| {
+        error!("Failed to insert batch: {:?}", e);
+        api_error_to_response(&e)
+    })?;
 
     Ok(Json(BatchInsertResponse {
         inserted: ids.len(),
@@ -94,14 +88,10 @@ pub async fn delete_point_handler(
 
 pub async fn search_points_handler(
     State(app_state): State<AppState>,
-    Json(request): Json<SearchQueryInput>,
+    Json(request): Json<SearchQuery>,
 ) -> Result<Json<SearchResponse>, (StatusCode, String)> {
     match app_state.db.search(request) {
-        Ok(results) => {
-            let (results, scores) = results.into_iter().unzip();
-            let response = SearchResponse { results, scores };
-            Ok(Json(response))
-        }
+        Ok(hits) => Ok(Json(SearchResponse { hits })),
         Err(e) => {
             error!("Failed to search points: {:?}", e);
             Err(api_error_to_response(&e))
@@ -112,16 +102,16 @@ pub async fn search_points_handler(
 pub async fn batch_search_handler(
     State(state): State<AppState>,
     Json(request): Json<BatchSearchRequest>,
-) -> Result<Json<BatchSearchResponse>, AppError> {
+) -> Result<Json<BatchSearchResponse>, (StatusCode, String)> {
     let results = state
         .db
         .search_batch(request.queries)
-        .map_err(|e| AppError::Api(e.to_string()))?
+        .map_err(|e| {
+            error!("Failed to search batch: {:?}", e);
+            api_error_to_response(&e)
+        })?
         .into_iter()
-        .map(|found| {
-            let (results, scores) = found.into_iter().unzip();
-            SearchResponse { results, scores }
-        })
+        .map(|hits| SearchResponse { hits })
         .collect();
 
     Ok(Json(BatchSearchResponse { results }))
@@ -133,6 +123,9 @@ fn api_error_to_response(err: &ApiError) -> (StatusCode, String) {
         ApiError::PointNotFound { .. } => (StatusCode::NOT_FOUND, err.to_string()),
         ApiError::DimensionMismatch { .. } => (StatusCode::BAD_REQUEST, err.to_string()),
         ApiError::InvalidSearchLimit { .. } => (StatusCode::BAD_REQUEST, err.to_string()),
+        ApiError::InvalidSparseVector { .. } => (StatusCode::BAD_REQUEST, err.to_string()),
+        ApiError::PointAlreadyExists { .. } => (StatusCode::CONFLICT, err.to_string()),
+        ApiError::MissingVector { .. } => (StatusCode::BAD_REQUEST, err.to_string()),
         ApiError::LockError => (
             StatusCode::SERVICE_UNAVAILABLE,
             "Server is busy, try again".to_string(),

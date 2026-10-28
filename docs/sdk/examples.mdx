@@ -10,29 +10,30 @@ Ready-to-run code examples demonstrating VortexDB Python SDK usage.
 ## Basic Usage
 
 ```python
-from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb import (
+    VortexDB, DenseQuery, DenseVector, Payload, PointInput, SearchQuery, Similarity, SparseVector,
+)
 
 with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
     # Insert
     point_id = db.insert(
-        vector=DenseVector([0.1, 0.2, 0.3]),
+        dense_vector=DenseVector([0.1, 0.2, 0.3]),
         payload=Payload.text("hello world"),
     )
     print(f"Inserted: {point_id}")
 
-    # Batch insert
-    ids = db.batch_insert(items=[
-        (DenseVector([0.1, 0.2, 0.3]), Payload.text("doc one")),
-        (DenseVector([0.4, 0.5, 0.6]), Payload.text("doc two")),
+    # Batch insert: dense, sparse, or both on one point
+    ids = db.batch_insert(points=[
+        PointInput(dense_vector=DenseVector([0.1, 0.2, 0.3]), payload=Payload.text("doc one")),
+        PointInput(sparse_vector=SparseVector([4, 8], [1.0, 0.5]), payload=Payload.text("doc two")),
     ])
 
-    # Search
-    results = db.search(
-        vector=DenseVector([0.1, 0.2, 0.3]),
-        similarity=Similarity.COSINE,
-        limit=3,
-    )
-    print(f"Found {len(results)} results")
+    # Dense search: score is a distance, lower is closer
+    hits = db.search(query=SearchQuery(3, DenseQuery(DenseVector([0.1, 0.2, 0.3]), Similarity.COSINE)))
+    print(f"Found {len(hits)} results")
+
+    # Sparse search: score is a dot product, higher is closer
+    hits = db.search(query=SearchQuery(3, SparseVector([8], [1.0])))
 ```
 
 ---
@@ -42,7 +43,7 @@ with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
 Using sentence-transformers for text embedding:
 
 ```python
-from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb import VortexDB, DenseQuery, DenseVector, Payload, SearchQuery, Similarity
 from sentence_transformers import SentenceTransformer
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -58,15 +59,14 @@ def embed(text: str) -> DenseVector:
 
 with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
     for doc in documents:
-        db.insert(vector=embed(doc), payload=Payload.text(doc))
+        db.insert(dense_vector=embed(doc), payload=Payload.text(doc))
 
-    results = db.search(
-        vector=embed("AI and programming"),
-        similarity=Similarity.COSINE,
+    hits = db.search(query=SearchQuery(
         limit=2,
-    )
-    for pid in results:
-        point = db.get(point_id=pid)
+        query=DenseQuery(embed("AI and programming"), Similarity.COSINE),
+    ))
+    for hit in hits:
+        point = db.get(point_id=hit.id)
         print(f"  {point.payload.content}")
 ```
 
@@ -75,16 +75,22 @@ with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
 ## Batch Processing
 
 ```python
-from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb import (
+    VortexDB, DenseQuery, DenseVector, Payload, PointInput, SearchQuery, Similarity, SparseVector,
+)
 
 with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
-    items = [(DenseVector([i * 0.1 for _ in range(3)]), Payload.text(f"doc {i}")) for i in range(100)]
-    ids = db.batch_insert(items=items)
+    points = [
+        PointInput(dense_vector=DenseVector([(i + 1) * 0.1] * 3), payload=Payload.text(f"doc {i}"))
+        for i in range(100)
+    ]
+    ids = db.batch_insert(points=points)
 
-    # Batch search
+    # Batch search, dense and sparse queries can be mixed
     queries = [
-        (DenseVector([0.1, 0.2, 0.3]), Similarity.COSINE, 3),
-        (DenseVector([0.4, 0.5, 0.6]), Similarity.EUCLIDEAN, 3),
+        SearchQuery(3, DenseQuery(DenseVector([0.1, 0.2, 0.3]), Similarity.COSINE)),
+        SearchQuery(3, DenseQuery(DenseVector([0.4, 0.5, 0.6]), Similarity.EUCLIDEAN)),
+        SearchQuery(3, SparseVector([1, 2], [1.0, 1.0])),
     ]
     batch_results = db.batch_search(queries=queries)
     for i, res in enumerate(batch_results):
@@ -97,7 +103,7 @@ with VortexDB(grpc_url="localhost:50051", api_key="secret") as db:
 
 ```python
 import pytest
-from vortexdb import VortexDB, DenseVector, Payload, Similarity
+from vortexdb import VortexDB, DenseQuery, DenseVector, Payload, SearchQuery, Similarity
 
 @pytest.fixture
 def db():
@@ -108,7 +114,7 @@ def db():
 class TestVortexDB:
     def test_insert_and_get(self, db):
         point_id = db.insert(
-            vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
+            dense_vector=DenseVector([0.1, 0.2, 0.3, 0.4]),
             payload=Payload.text("Test document"),
         )
         point = db.get(point_id=point_id)
@@ -118,15 +124,14 @@ class TestVortexDB:
 
     def test_search(self, db):
         point_id = db.insert(
-            vector=DenseVector([1.0, 2.0, 3.0]),
+            dense_vector=DenseVector([1.0, 2.0, 3.0, 4.0]),
             payload=Payload.text("target"),
         )
-        results = db.search(
-            vector=DenseVector([1.0, 2.0, 3.0]),
-            similarity=Similarity.COSINE,
+        hits = db.search(query=SearchQuery(
             limit=10,
-        )
-        assert point_id in results
+            query=DenseQuery(DenseVector([1.0, 2.0, 3.0, 4.0]), Similarity.COSINE),
+        ))
+        assert point_id in [hit.id for hit in hits]
         db.delete(point_id=point_id)
 ```
 

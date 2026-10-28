@@ -3,6 +3,7 @@ from typing import Any
 import grpc
 
 from vortexdb.exceptions import (
+    AlreadyExistsError,
     AuthenticationError,
     InternalServerError,
     InvalidArgumentError,
@@ -28,6 +29,9 @@ def map_grpc_error(error: Any) -> VortexDBError:
 
     if code == grpc.StatusCode.INVALID_ARGUMENT:
         return InvalidArgumentError(error.details())
+
+    if code == grpc.StatusCode.ALREADY_EXISTS:
+        return AlreadyExistsError(error.details())
 
     if code == grpc.StatusCode.DEADLINE_EXCEEDED:
         return TimeoutError(error.details())

@@ -5,9 +5,9 @@ use crate::error::{
     self, RocksDbCheckpointIoSnafu, RocksDbCheckpointMsgSnafu, RocksDbCheckpointSnafu,
     RocksDbFlushSnafu, RocksDbInitializationSnafu, StorageError,
 };
-use crate::{StorageEngine, StorageType, VectorPage};
+use crate::{PointPage, StorageEngine, StorageType};
 use bincode::{deserialize, serialize};
-use defs::{DenseVector, Payload, Point, PointId};
+use defs::{DenseVector, Payload, Point, PointId, SparseVector};
 use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use rocksdb::{DB, Error, Options};
 use snafu::{OptionExt, ResultExt};
@@ -70,12 +70,14 @@ impl StorageEngine for RocksDbStorage {
         &self,
         id: PointId,
         vector: Option<DenseVector>,
+        sparse_vector: Option<SparseVector>,
         payload: Option<Payload>,
     ) -> Result<(), StorageError> {
         let key = id.to_string();
         let point = Point {
             id,
-            vector,
+            dense_vector: vector,
+            sparse_vector,
             payload,
         };
         let value = serialize(&point).context(error::SerializationSnafu { id })?;
@@ -122,7 +124,7 @@ impl StorageEngine for RocksDbStorage {
         Ok(())
     }
 
-    fn get_payload(&self, id: PointId) -> Result<Option<Payload>, StorageError> {
+    fn get_point(&self, id: PointId) -> Result<Option<Point>, StorageError> {
         let key = id.to_string();
         let Some(value_serialized) = self
             .db
@@ -134,35 +136,21 @@ impl StorageEngine for RocksDbStorage {
             return Ok(None); // This should not return error but rather give None
         };
 
-        let value =
+        let point =
             deserialize::<Point>(&value_serialized).context(error::DeserializationSnafu { id })?;
 
-        Ok(value.payload)
+        Ok(Some(point))
     }
 
     fn get_vector(&self, id: PointId) -> Result<Option<DenseVector>, StorageError> {
-        let key = id.to_string();
-        let Some(value_serialized) = self
-            .db
-            .as_ref()
-            .ok_or(StorageError::RocksDbInitialization {})?
-            .get(key)
-            .context(error::RocksDbReadSnafu { id })?
-        else {
-            return Ok(None); // This should not return error but rather give None
-        };
-
-        let value =
-            deserialize::<Point>(&value_serialized).context(error::DeserializationSnafu { id })?;
-
-        Ok(value.vector)
+        Ok(self.get_point(id)?.and_then(|point| point.dense_vector))
     }
 
-    fn list_vectors(
+    fn list_points(
         &self,
         offset: PointId,
         limit: usize,
-    ) -> Result<Option<VectorPage>, StorageError> {
+    ) -> Result<Option<PointPage>, StorageError> {
         if limit < 1 {
             return Ok(None);
         }
@@ -189,12 +177,10 @@ impl StorageEngine for RocksDbStorage {
                 continue;
             }
 
-            if let Some(vec) = point.vector {
-                last_id = id;
-                result.push((id, vec));
-                if result.len() == limit {
-                    break;
-                }
+            last_id = id;
+            result.push(point);
+            if result.len() == limit {
+                break;
             }
         }
         Ok(Some((result, last_id)))

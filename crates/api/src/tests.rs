@@ -4,7 +4,7 @@ use super::*;
 
 use std::sync::Mutex;
 
-use defs::ContentType;
+use defs::{ContentType, DenseQuery, Payload, SparseVector};
 use snapshot::{engine::SnapshotEngine, registry::local::LocalRegistry};
 use tempfile::{TempDir, tempdir};
 
@@ -34,6 +34,26 @@ fn test_payload(content: &str) -> Payload {
     }
 }
 
+fn dense_point(vector: Vec<f32>, payload: Payload) -> PointInput {
+    PointInput {
+        id: None,
+        dense_vector: Some(vector),
+        sparse_vector: None,
+        payload: Some(payload),
+    }
+}
+
+fn dense_query(vector: Vec<f32>, similarity: Similarity, limit: usize) -> SearchQuery {
+    SearchQuery {
+        limit,
+        query: QueryVector::Dense(DenseQuery {
+            vector,
+            similarity,
+            ef: None,
+        }),
+    }
+}
+
 #[test]
 fn test_insert_and_get() {
     let (db, _temp_dir) = create_test_db();
@@ -44,13 +64,15 @@ fn test_insert_and_get() {
     };
 
     // Test insert
-    let id = db.insert(vector.clone(), payload.clone()).unwrap();
+    let id = db
+        .insert(dense_point(vector.clone(), payload.clone()))
+        .unwrap();
     assert!(id != Uuid::nil());
 
     // Test get
     let point = db.get(id).unwrap().unwrap();
     assert_eq!(point.id, id);
-    assert_eq!(point.vector.as_ref().unwrap(), &vector);
+    assert_eq!(point.dense_vector.as_ref().unwrap(), &vector);
     assert_eq!(point.payload.as_ref().unwrap(), &payload);
     assert_eq!(
         point.payload.as_ref().unwrap().content_type,
@@ -65,11 +87,13 @@ fn test_insert_and_get_with_in_memory_storage() {
     let vector = vec![1.0, 2.0, 3.0];
     let payload = test_payload("Test content");
 
-    let id = db.insert(vector.clone(), payload.clone()).unwrap();
+    let id = db
+        .insert(dense_point(vector.clone(), payload.clone()))
+        .unwrap();
     let point = db.get(id).unwrap().unwrap();
 
     assert_eq!(point.id, id);
-    assert_eq!(point.vector, Some(vector));
+    assert_eq!(point.dense_vector, Some(vector));
     assert_eq!(point.payload, Some(payload));
 }
 
@@ -83,11 +107,11 @@ fn test_dimension_mismatch() {
         content: "tester".to_string(),
     };
 
-    let res1 = db.insert(v1, payload.clone());
+    let res1 = db.insert(dense_point(v1, payload.clone()));
     assert!(res1.is_ok());
 
     // Insert vector of dimension 2 != 3
-    let res2 = db.insert(v2, payload);
+    let res2 = db.insert(dense_point(v2, payload));
     assert!(res2.is_err());
     match res2.unwrap_err() {
         ApiError::DimensionMismatch { expected, got } => {
@@ -108,7 +132,7 @@ fn test_delete() {
     };
 
     // Insert a point
-    let id = db.insert(vector, payload).unwrap();
+    let id = db.insert(dense_point(vector, payload)).unwrap();
 
     // try deleting a point that does not exist
     let found = db.delete(Uuid::new_v4());
@@ -138,25 +162,20 @@ fn test_search() {
             content_type: ContentType::Text,
             content: format!("Test content {vector:?}"),
         };
-        let id = db.insert(vector, payload).unwrap();
+        let id = db.insert(dense_point(vector, payload)).unwrap();
         ids.push(id);
     }
 
     // Search for the closest vector to [1.0, 0.1, 0.1]
     let query = vec![1.0, 0.1, 0.1];
     let results = db
-        .search(SearchQueryInput {
-            vector: query,
-            similarity: Similarity::Cosine,
-            limit: 1,
-            ef: None,
-        })
+        .search(dense_query(query, Similarity::Cosine, 1))
         .unwrap();
 
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].0, ids[0]); // The first vector should be closest
+    assert_eq!(results[0].id, ids[0]); // The first vector should be closest
     let expected = 1.0 - 1.0 / 1.02f32.sqrt();
-    assert!((results[0].1 - expected).abs() < 1e-6);
+    assert!((results[0].score - expected).abs() < 1e-6);
 }
 
 #[test]
@@ -168,13 +187,13 @@ fn test_search_limit() {
     for i in 0..5 {
         let vector = vec![i as f32, 0.0, 0.0];
         let id = db
-            .insert(
+            .insert(dense_point(
                 vector,
                 Payload {
                     content_type: ContentType::Text,
                     content: format!("Test content {i}"),
                 },
-            )
+            ))
             .unwrap();
         ids.push(id);
     }
@@ -182,12 +201,7 @@ fn test_search_limit() {
     // Search with limit 3
     let query = vec![0.0, 0.0, 0.0];
     let results = db
-        .search(SearchQueryInput {
-            vector: query,
-            similarity: Similarity::Euclidean,
-            limit: 3,
-            ef: None,
-        })
+        .search(dense_query(query, Similarity::Euclidean, 3))
         .unwrap();
 
     assert_eq!(results.len(), 3);
@@ -198,12 +212,7 @@ fn test_search_zero_limit() {
     let (db, _temp_dir) = create_test_db();
 
     let query = vec![1.0, 2.0, 3.0];
-    let result = db.search(SearchQueryInput {
-        vector: query,
-        similarity: Similarity::Cosine,
-        limit: 0,
-        ef: None,
-    });
+    let result = db.search(dense_query(query, Similarity::Cosine, 0));
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -215,6 +224,24 @@ fn test_search_zero_limit() {
 }
 
 #[test]
+fn test_search_limit_above_max() {
+    let (db, _temp_dir) = create_test_db();
+
+    assert!(
+        db.search(dense_query(vec![1.0, 2.0, 3.0], Similarity::Cosine, 10_000))
+            .is_ok()
+    );
+    assert!(matches!(
+        db.search(dense_query(vec![1.0, 2.0, 3.0], Similarity::Cosine, 10_001)),
+        Err(ApiError::InvalidSearchLimit { limit: 10_001 })
+    ));
+    assert!(matches!(
+        db.search(sparse_query(vec![1], vec![1.0], usize::MAX)),
+        Err(ApiError::InvalidSearchLimit { .. })
+    ));
+}
+
+#[test]
 fn test_empty_database() {
     let (db, _temp_dir) = create_test_db();
 
@@ -223,12 +250,7 @@ fn test_empty_database() {
 
     let query = vec![1.0, 2.0, 3.0];
     let results = db
-        .search(SearchQueryInput {
-            vector: query,
-            similarity: Similarity::Cosine,
-            limit: 10,
-            ef: None,
-        })
+        .search(dense_query(query, Similarity::Cosine, 10))
         .unwrap();
     assert_eq!(results.len(), 0);
 }
@@ -242,13 +264,13 @@ fn test_list_vectors() {
         let i = i as f32;
         let vector = vec![i, i + 1.0, i + 2.0];
         let id = db
-            .insert(
+            .insert(dense_point(
                 vector,
                 Payload {
                     content_type: ContentType::Text,
                     content: format!("Test content {i}"),
                 },
-            )
+            ))
             .unwrap();
         ids.push(id);
     }
@@ -272,13 +294,13 @@ fn test_build_index() {
     for i in 0..10 {
         let i = i as f32;
         let vector = vec![i, i + 1.0, i + 2.0];
-        db.insert(
+        db.insert(dense_point(
             vector,
             Payload {
                 content_type: ContentType::Text,
                 content: format!("Test content {i}"),
             },
-        )
+        ))
         .unwrap();
     }
 
@@ -296,23 +318,23 @@ fn test_create_and_load_snapshot() {
     let v3 = vec![6.0, 7.0, 8.0];
 
     let id1 = old_db
-        .insert(
+        .insert(dense_point(
             v1.clone(),
             Payload {
                 content_type: ContentType::Text,
                 content: "test".to_string(),
             },
-        )
+        ))
         .unwrap();
 
     let id2 = old_db
-        .insert(
+        .insert(dense_point(
             v2.clone(),
             Payload {
                 content_type: ContentType::Text,
                 content: "test".to_string(),
             },
-        )
+        ))
         .unwrap();
 
     let temp_snapshot_dir = tempdir().unwrap();
@@ -320,13 +342,13 @@ fn test_create_and_load_snapshot() {
 
     // insert v3 after snapshot
     let id3 = old_db
-        .insert(
+        .insert(dense_point(
             v3.clone(),
             Payload {
                 content_type: ContentType::Text,
                 content: "test".to_string(),
             },
-        )
+        ))
         .unwrap();
 
     let reload_config = DbRestoreConfig {
@@ -342,8 +364,8 @@ fn test_create_and_load_snapshot() {
     assert!(loaded_db.get(id3).unwrap_or(None).is_none()); // v3 was inserted after snapshot was taken
 
     // vector restore check
-    assert!(loaded_db.get(id1).unwrap().unwrap().vector.unwrap() == v1);
-    assert!(loaded_db.get(id2).unwrap().unwrap().vector.unwrap() == v2);
+    assert!(loaded_db.get(id1).unwrap().unwrap().dense_vector.unwrap() == v1);
+    assert!(loaded_db.get(id2).unwrap().unwrap().dense_vector.unwrap() == v2);
 }
 
 #[test]
@@ -354,13 +376,19 @@ fn test_create_and_load_snapshot_with_in_memory_storage() {
     let v2 = vec![3.0, 4.0, 5.0];
     let v3 = vec![6.0, 7.0, 8.0];
 
-    let id1 = old_db.insert(v1.clone(), test_payload("one")).unwrap();
-    let id2 = old_db.insert(v2.clone(), test_payload("two")).unwrap();
+    let id1 = old_db
+        .insert(dense_point(v1.clone(), test_payload("one")))
+        .unwrap();
+    let id2 = old_db
+        .insert(dense_point(v2.clone(), test_payload("two")))
+        .unwrap();
 
     let temp_snapshot_dir = tempdir().unwrap();
     let snapshot_path = old_db.create_snapshot(temp_snapshot_dir.path()).unwrap();
 
-    let id3 = old_db.insert(v3, test_payload("three")).unwrap();
+    let id3 = old_db
+        .insert(dense_point(v3, test_payload("three")))
+        .unwrap();
 
     let reload_config = DbRestoreConfig {
         data_path: temp_dir.path().to_path_buf(),
@@ -369,8 +397,8 @@ fn test_create_and_load_snapshot_with_in_memory_storage() {
 
     let loaded_db = restore_from_snapshot(&reload_config).unwrap();
 
-    assert_eq!(loaded_db.get(id1).unwrap().unwrap().vector, Some(v1));
-    assert_eq!(loaded_db.get(id2).unwrap().unwrap().vector, Some(v2));
+    assert_eq!(loaded_db.get(id1).unwrap().unwrap().dense_vector, Some(v1));
+    assert_eq!(loaded_db.get(id2).unwrap().unwrap().dense_vector, Some(v2));
     assert!(loaded_db.get(id3).unwrap().is_none());
 }
 
@@ -400,13 +428,13 @@ fn test_snapshot_engine() {
         let id = db
             .lock()
             .unwrap()
-            .insert(
+            .insert(dense_point(
                 vector.clone(),
                 Payload {
                     content_type: ContentType::Text,
                     content: format!("{}", i),
                 },
-            )
+            ))
             .unwrap();
         inserted_ids.push(id);
     }
@@ -433,7 +461,14 @@ fn test_snapshot_engine() {
             // test if point is present
             assert!(db.get(inserted_ids[j]).unwrap_or(None).is_some());
             // test vector restore
-            assert!(db.get(inserted_ids[j]).unwrap().unwrap().vector.unwrap() == test_vectors[j]);
+            assert!(
+                db.get(inserted_ids[j])
+                    .unwrap()
+                    .unwrap()
+                    .dense_vector
+                    .unwrap()
+                    == test_vectors[j]
+            );
             // test payload restore
             assert!(
                 db.get(inserted_ids[j])
@@ -450,4 +485,310 @@ fn test_snapshot_engine() {
         }
         std::mem::drop(db);
     }
+}
+
+fn sparse_point(id: PointId, token_ids: Vec<defs::TokenID>, weights: Vec<f32>) -> PointInput {
+    PointInput {
+        id: Some(id),
+        dense_vector: None,
+        sparse_vector: Some(SparseVector { token_ids, weights }),
+        payload: Some(test_payload("sparse")),
+    }
+}
+
+fn sparse_query(token_ids: Vec<defs::TokenID>, weights: Vec<f32>, limit: usize) -> SearchQuery {
+    SearchQuery {
+        limit,
+        query: QueryVector::Sparse(SparseVector { token_ids, weights }),
+    }
+}
+
+fn hit_ids(hits: &[SearchHit]) -> Vec<PointId> {
+    hits.iter().map(|hit| hit.id).collect()
+}
+
+#[test]
+fn test_sparse_insert_get_and_search() {
+    let (db, _temp_dir) = create_test_db();
+    let id1 = Uuid::from_u128(1);
+    let id2 = Uuid::from_u128(2);
+    db.insert_batch(vec![
+        sparse_point(id1, vec![1, 2], vec![1.0, 2.0]),
+        sparse_point(id2, vec![2, 3], vec![1.0, 3.0]),
+    ])
+    .unwrap();
+
+    let point = db.get(id1).unwrap().unwrap();
+    assert_eq!(point.dense_vector, None);
+    assert_eq!(point.sparse_vector.unwrap().token_ids, vec![1, 2]);
+
+    let hits = db
+        .search(sparse_query(vec![2, 3], vec![1.0, 1.0], 10))
+        .unwrap();
+    assert_eq!(
+        hits,
+        vec![
+            SearchHit {
+                id: id2,
+                score: 4.0
+            },
+            SearchHit {
+                id: id1,
+                score: 2.0
+            }
+        ]
+    );
+}
+
+#[test]
+fn test_insert_mixed_batch() {
+    let (db, _temp_dir) = create_test_db();
+    let dense_id = Uuid::from_u128(1);
+    let sparse_id = Uuid::from_u128(2);
+    let both_id = Uuid::from_u128(3);
+    db.insert_batch(vec![
+        PointInput {
+            id: Some(dense_id),
+            ..dense_point(vec![1.0, 0.0, 0.0], test_payload("dense"))
+        },
+        sparse_point(sparse_id, vec![5], vec![1.0]),
+        PointInput {
+            id: Some(both_id),
+            dense_vector: Some(vec![0.0, 1.0, 0.0]),
+            sparse_vector: Some(SparseVector {
+                token_ids: vec![5],
+                weights: vec![2.0],
+            }),
+            payload: None,
+        },
+    ])
+    .unwrap();
+
+    let both = db.get(both_id).unwrap().unwrap();
+    assert!(both.dense_vector.is_some() && both.sparse_vector.is_some());
+
+    let dense_hits = db
+        .search(dense_query(vec![1.0, 0.0, 0.0], Similarity::Cosine, 10))
+        .unwrap();
+    assert_eq!(hit_ids(&dense_hits), vec![dense_id, both_id]);
+
+    let sparse_hits = db.search(sparse_query(vec![5], vec![1.0], 10)).unwrap();
+    assert_eq!(hit_ids(&sparse_hits), vec![both_id, sparse_id]);
+}
+
+#[test]
+fn test_insert_rejects_point_without_vectors() {
+    let (db, _temp_dir) = create_test_db();
+    let result = db.insert(PointInput {
+        id: None,
+        dense_vector: None,
+        sparse_vector: None,
+        payload: Some(test_payload("empty")),
+    });
+    assert!(matches!(result, Err(ApiError::MissingVector { .. })));
+}
+
+#[test]
+fn test_sparse_insert_rejects_invalid_vector() {
+    let (db, _temp_dir) = create_test_db();
+    let result = db.insert_batch(vec![sparse_point(
+        Uuid::new_v4(),
+        vec![2, 1],
+        vec![1.0, 1.0],
+    )]);
+    assert!(matches!(result, Err(ApiError::InvalidSparseVector { .. })));
+}
+
+#[test]
+fn test_sparse_weights_must_not_be_negative() {
+    let (db, _temp_dir) = create_test_db();
+    let result = db.insert_batch(vec![sparse_point(
+        Uuid::new_v4(),
+        vec![1, 2],
+        vec![1.0, -0.5],
+    )]);
+    assert!(matches!(result, Err(ApiError::InvalidSparseVector { .. })));
+
+    assert!(
+        db.insert_batch(vec![sparse_point(
+            Uuid::new_v4(),
+            vec![1, 2],
+            vec![0.0, 1.0]
+        )])
+        .is_ok()
+    );
+    assert!(matches!(
+        db.search(sparse_query(vec![1], vec![-1.0], 5)),
+        Err(ApiError::InvalidSparseVector { .. })
+    ));
+}
+
+#[test]
+fn test_insert_rejects_existing_point_id() {
+    let (db, _temp_dir) = create_test_db();
+    let id = Uuid::new_v4();
+    db.insert_batch(vec![sparse_point(id, vec![1], vec![1.0])])
+        .unwrap();
+
+    let result = db.insert_batch(vec![sparse_point(id, vec![2], vec![1.0])]);
+    assert!(matches!(result, Err(ApiError::PointAlreadyExists { .. })));
+}
+
+#[test]
+fn test_insert_rejects_duplicate_id_within_batch() {
+    let (db, _temp_dir) = create_test_db();
+    let id = Uuid::new_v4();
+    let result = db.insert_batch(vec![
+        sparse_point(id, vec![1], vec![1.0]),
+        sparse_point(id, vec![2], vec![1.0]),
+    ]);
+
+    assert!(matches!(result, Err(ApiError::PointAlreadyExists { .. })));
+    assert!(db.get(id).unwrap().is_none());
+}
+
+#[test]
+fn test_failed_batch_writes_nothing() {
+    let (db, _temp_dir) = create_test_db();
+    let id1 = Uuid::from_u128(1);
+    let id2 = Uuid::from_u128(2);
+    let result = db.insert_batch(vec![
+        sparse_point(id1, vec![1], vec![1.0]),
+        sparse_point(id2, vec![2], vec![1.0]),
+        dense_point(vec![1.0, 2.0], test_payload("wrong dimension")),
+    ]);
+
+    assert!(matches!(result, Err(ApiError::DimensionMismatch { .. })));
+    assert!(db.get(id1).unwrap().is_none());
+    assert!(db.get(id2).unwrap().is_none());
+    assert!(
+        db.search(sparse_query(vec![1, 2], vec![1.0, 1.0], 5))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_sparse_search_validates_query() {
+    let (db, _temp_dir) = create_test_db();
+    assert!(matches!(
+        db.search(sparse_query(vec![1], vec![1.0], 0)),
+        Err(ApiError::InvalidSearchLimit { .. })
+    ));
+    assert!(matches!(
+        db.search(sparse_query(vec![], vec![], 5)),
+        Err(ApiError::InvalidSparseVector { .. })
+    ));
+}
+
+#[test]
+fn test_search_batch_mixes_dense_and_sparse() {
+    let (db, _temp_dir) = create_test_db();
+    let dense_id = db
+        .insert(dense_point(vec![1.0, 0.0, 0.0], test_payload("dense")))
+        .unwrap();
+    let sparse_id = Uuid::from_u128(2);
+    db.insert(sparse_point(sparse_id, vec![2], vec![2.0]))
+        .unwrap();
+
+    let results = db
+        .search_batch(vec![
+            dense_query(vec![1.0, 0.0, 0.0], Similarity::Cosine, 5),
+            sparse_query(vec![2], vec![1.0], 5),
+        ])
+        .unwrap();
+    assert_eq!(hit_ids(&results[0]), vec![dense_id]);
+    assert_eq!(
+        results[1],
+        vec![SearchHit {
+            id: sparse_id,
+            score: 2.0
+        }]
+    );
+}
+
+#[test]
+fn test_search_batch_rejects_invalid_query() {
+    let (db, _temp_dir) = create_test_db();
+    let result = db.search_batch(vec![
+        sparse_query(vec![1], vec![1.0], 5),
+        dense_query(vec![1.0], Similarity::Cosine, 5),
+    ]);
+    assert!(matches!(result, Err(ApiError::DimensionMismatch { .. })));
+}
+
+#[test]
+fn test_delete_removes_point_from_both_indexes() {
+    let (db, _temp_dir) = create_test_db();
+    let id = Uuid::new_v4();
+    db.insert(PointInput {
+        id: Some(id),
+        dense_vector: Some(vec![1.0, 0.0, 0.0]),
+        sparse_vector: Some(SparseVector {
+            token_ids: vec![1, 2],
+            weights: vec![1.0, 1.0],
+        }),
+        payload: None,
+    })
+    .unwrap();
+
+    assert!(db.delete(id).unwrap());
+    assert!(db.get(id).unwrap().is_none());
+    assert!(
+        db.search(sparse_query(vec![1, 2], vec![1.0, 1.0], 5))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        db.search(dense_query(vec![1.0, 0.0, 0.0], Similarity::Cosine, 5))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!db.delete(id).unwrap());
+}
+
+#[test]
+fn test_sparse_index_rebuilt_on_reopen() {
+    let temp_dir = tempdir().unwrap();
+    let config = || DbConfig {
+        storage_type: StorageType::RocksDb,
+        index_type: IndexType::Flat,
+        data_path: temp_dir.path().to_path_buf(),
+        dimension: 3,
+        similarity: Similarity::Cosine,
+        hnsw_config: HnswConfig::default(),
+        kd_tree_config: KDTreeConfig::default(),
+    };
+    let id = Uuid::new_v4();
+
+    let db = init_api(config()).unwrap();
+    db.insert(sparse_point(id, vec![3], vec![1.5])).unwrap();
+    std::mem::drop(db);
+
+    let reopened = init_api(config()).unwrap();
+    let hits = reopened
+        .search(sparse_query(vec![3], vec![1.0], 5))
+        .unwrap();
+    assert_eq!(hits, vec![SearchHit { id, score: 1.5 }]);
+}
+
+#[test]
+fn test_sparse_index_rebuilt_on_snapshot_restore() {
+    let (old_db, temp_dir) = create_test_db();
+    let id = Uuid::new_v4();
+    old_db.insert(sparse_point(id, vec![3], vec![1.5])).unwrap();
+
+    let temp_snapshot_dir = tempdir().unwrap();
+    let snapshot_path = old_db.create_snapshot(temp_snapshot_dir.path()).unwrap();
+    std::mem::drop(old_db);
+
+    let loaded_db = restore_from_snapshot(&DbRestoreConfig {
+        data_path: temp_dir.path().to_path_buf(),
+        snapshot_path,
+    })
+    .unwrap();
+    let hits = loaded_db
+        .search(sparse_query(vec![3], vec![1.0], 5))
+        .unwrap();
+    assert_eq!(hits, vec![SearchHit { id, score: 1.5 }]);
 }

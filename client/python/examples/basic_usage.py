@@ -1,5 +1,11 @@
 from vortexdb import VortexDB
-from vortexdb import DenseVector, Payload, Similarity  # from vortexdb.models
+from vortexdb import (
+    DenseQuery,
+    DenseVector,
+    Payload,
+    SearchQuery,
+    Similarity,
+)  # from vortexdb.models
 
 
 def main():
@@ -11,7 +17,7 @@ def main():
 
     # Insert a vector
     point_id = db.insert(
-        vector=DenseVector([0.1, 0.2, 0.3]),
+        dense_vector=DenseVector([0.1, 0.2, 0.3]),
         payload=Payload.text("hello world"),
     )
 
@@ -21,9 +27,10 @@ def main():
 
     # Search
     results = db.search(
-        vector=DenseVector([0.1, 0.2, 0.3]),
-        similarity=Similarity.COSINE,
-        limit=3,
+        query=SearchQuery(
+            limit=3,
+            query=DenseQuery(DenseVector([0.1, 0.2, 0.3]), Similarity.COSINE),
+        )
     )
     print("Search results:", results)
 

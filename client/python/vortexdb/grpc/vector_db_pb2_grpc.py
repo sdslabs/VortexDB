@@ -35,9 +35,9 @@ class VectorDBStub:
         Args:
             channel: A grpc.Channel.
         """
-        self.InsertVector = channel.unary_unary(
-                '/vectordb.VectorDB/InsertVector',
-                request_serializer=vector__db__pb2.InsertVectorRequest.SerializeToString,
+        self.InsertPoint = channel.unary_unary(
+                '/vectordb.VectorDB/InsertPoint',
+                request_serializer=vector__db__pb2.PointInput.SerializeToString,
                 response_deserializer=vector__db__pb2.PointID.FromString,
                 _registered_method=True)
         self.DeletePoint = channel.unary_unary(
@@ -50,61 +50,61 @@ class VectorDBStub:
                 request_serializer=vector__db__pb2.PointID.SerializeToString,
                 response_deserializer=vector__db__pb2.Point.FromString,
                 _registered_method=True)
-        self.SearchPoints = channel.unary_unary(
-                '/vectordb.VectorDB/SearchPoints',
+        self.Search = channel.unary_unary(
+                '/vectordb.VectorDB/Search',
                 request_serializer=vector__db__pb2.SearchRequest.SerializeToString,
                 response_deserializer=vector__db__pb2.SearchResponse.FromString,
                 _registered_method=True)
-        self.InsertVectorsBatch = channel.unary_unary(
-                '/vectordb.VectorDB/InsertVectorsBatch',
-                request_serializer=vector__db__pb2.InsertVectorsBatchRequest.SerializeToString,
-                response_deserializer=vector__db__pb2.InsertVectorsBatchResponse.FromString,
+        self.InsertPointsBatch = channel.unary_unary(
+                '/vectordb.VectorDB/InsertPointsBatch',
+                request_serializer=vector__db__pb2.InsertPointsBatchRequest.SerializeToString,
+                response_deserializer=vector__db__pb2.InsertPointsBatchResponse.FromString,
                 _registered_method=True)
-        self.SearchPointsBatch = channel.unary_unary(
-                '/vectordb.VectorDB/SearchPointsBatch',
-                request_serializer=vector__db__pb2.SearchPointsBatchRequest.SerializeToString,
-                response_deserializer=vector__db__pb2.SearchPointsBatchResponse.FromString,
+        self.SearchBatch = channel.unary_unary(
+                '/vectordb.VectorDB/SearchBatch',
+                request_serializer=vector__db__pb2.SearchBatchRequest.SerializeToString,
+                response_deserializer=vector__db__pb2.SearchBatchResponse.FromString,
                 _registered_method=True)
 
 
 class VectorDBServicer:
     """Missing associated documentation comment in .proto file."""
 
-    def InsertVector(self, request, context):
-        """Insert a vector with a payload and return the assigned PointID
+    def InsertPoint(self, request, context):
+        """Insert a point with a dense and/or sparse vector and return its PointID
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def DeletePoint(self, request, context):
-        """Delete a vector by its PointID
+        """Delete a point by its PointID
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetPoint(self, request, context):
-        """Get a vector and its payload by PointID
+        """Get a point with its vectors and payload by PointID
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SearchPoints(self, request, context):
-        """Search for the k nearest vectors to a target vector given a distance function
+    def Search(self, request, context):
+        """Search for the nearest points to a dense or sparse query
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def InsertVectorsBatch(self, request, context):
+    def InsertPointsBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SearchPointsBatch(self, request, context):
+    def SearchBatch(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -113,9 +113,9 @@ class VectorDBServicer:
 
 def add_VectorDBServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'InsertVector': grpc.unary_unary_rpc_method_handler(
-                    servicer.InsertVector,
-                    request_deserializer=vector__db__pb2.InsertVectorRequest.FromString,
+            'InsertPoint': grpc.unary_unary_rpc_method_handler(
+                    servicer.InsertPoint,
+                    request_deserializer=vector__db__pb2.PointInput.FromString,
                     response_serializer=vector__db__pb2.PointID.SerializeToString,
             ),
             'DeletePoint': grpc.unary_unary_rpc_method_handler(
@@ -128,20 +128,20 @@ def add_VectorDBServicer_to_server(servicer, server):
                     request_deserializer=vector__db__pb2.PointID.FromString,
                     response_serializer=vector__db__pb2.Point.SerializeToString,
             ),
-            'SearchPoints': grpc.unary_unary_rpc_method_handler(
-                    servicer.SearchPoints,
+            'Search': grpc.unary_unary_rpc_method_handler(
+                    servicer.Search,
                     request_deserializer=vector__db__pb2.SearchRequest.FromString,
                     response_serializer=vector__db__pb2.SearchResponse.SerializeToString,
             ),
-            'InsertVectorsBatch': grpc.unary_unary_rpc_method_handler(
-                    servicer.InsertVectorsBatch,
-                    request_deserializer=vector__db__pb2.InsertVectorsBatchRequest.FromString,
-                    response_serializer=vector__db__pb2.InsertVectorsBatchResponse.SerializeToString,
+            'InsertPointsBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.InsertPointsBatch,
+                    request_deserializer=vector__db__pb2.InsertPointsBatchRequest.FromString,
+                    response_serializer=vector__db__pb2.InsertPointsBatchResponse.SerializeToString,
             ),
-            'SearchPointsBatch': grpc.unary_unary_rpc_method_handler(
-                    servicer.SearchPointsBatch,
-                    request_deserializer=vector__db__pb2.SearchPointsBatchRequest.FromString,
-                    response_serializer=vector__db__pb2.SearchPointsBatchResponse.SerializeToString,
+            'SearchBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.SearchBatch,
+                    request_deserializer=vector__db__pb2.SearchBatchRequest.FromString,
+                    response_serializer=vector__db__pb2.SearchBatchResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -155,7 +155,7 @@ class VectorDB:
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def InsertVector(request,
+    def InsertPoint(request,
             target,
             options=(),
             channel_credentials=None,
@@ -168,8 +168,8 @@ class VectorDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/vectordb.VectorDB/InsertVector',
-            vector__db__pb2.InsertVectorRequest.SerializeToString,
+            '/vectordb.VectorDB/InsertPoint',
+            vector__db__pb2.PointInput.SerializeToString,
             vector__db__pb2.PointID.FromString,
             options,
             channel_credentials,
@@ -236,7 +236,7 @@ class VectorDB:
             _registered_method=True)
 
     @staticmethod
-    def SearchPoints(request,
+    def Search(request,
             target,
             options=(),
             channel_credentials=None,
@@ -249,7 +249,7 @@ class VectorDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/vectordb.VectorDB/SearchPoints',
+            '/vectordb.VectorDB/Search',
             vector__db__pb2.SearchRequest.SerializeToString,
             vector__db__pb2.SearchResponse.FromString,
             options,
@@ -263,7 +263,7 @@ class VectorDB:
             _registered_method=True)
 
     @staticmethod
-    def InsertVectorsBatch(request,
+    def InsertPointsBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -276,9 +276,9 @@ class VectorDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/vectordb.VectorDB/InsertVectorsBatch',
-            vector__db__pb2.InsertVectorsBatchRequest.SerializeToString,
-            vector__db__pb2.InsertVectorsBatchResponse.FromString,
+            '/vectordb.VectorDB/InsertPointsBatch',
+            vector__db__pb2.InsertPointsBatchRequest.SerializeToString,
+            vector__db__pb2.InsertPointsBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -290,7 +290,7 @@ class VectorDB:
             _registered_method=True)
 
     @staticmethod
-    def SearchPointsBatch(request,
+    def SearchBatch(request,
             target,
             options=(),
             channel_credentials=None,
@@ -303,9 +303,9 @@ class VectorDB:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/vectordb.VectorDB/SearchPointsBatch',
-            vector__db__pb2.SearchPointsBatchRequest.SerializeToString,
-            vector__db__pb2.SearchPointsBatchResponse.FromString,
+            '/vectordb.VectorDB/SearchBatch',
+            vector__db__pb2.SearchBatchRequest.SerializeToString,
+            vector__db__pb2.SearchBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,

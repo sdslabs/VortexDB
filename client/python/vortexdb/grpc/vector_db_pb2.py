@@ -25,41 +25,47 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fvector-db.proto\x12\x08vectordb\x1a\x1bgoogle/protobuf/empty.proto\"\x15\n\x04UUID\x12\r\n\x05value\x18\x01 \x01(\t\"`\n\x13InsertVectorRequest\x12%\n\x06vector\x18\x01 \x01(\x0b\x32\x15.vectordb.DenseVector\x12\"\n\x07payload\x18\x02 \x01(\x0b\x32\x11.vectordb.Payload\"\x81\x01\n\rSearchRequest\x12+\n\x0cquery_vector\x18\x01 \x01(\x0b\x32\x15.vectordb.DenseVector\x12(\n\nsimilarity\x18\x02 \x01(\x0e\x32\x14.vectordb.Similarity\x12\r\n\x05limit\x18\x03 \x01(\x04\x12\n\n\x02\x65\x66\x18\x04 \x01(\x04\"M\n\x0eSearchResponse\x12+\n\x10result_point_ids\x18\x01 \x03(\x0b\x32\x11.vectordb.PointID\x12\x0e\n\x06scores\x18\x02 \x03(\x02\"\x1d\n\x0b\x44\x65nseVector\x12\x0e\n\x06values\x18\x01 \x03(\x02\"q\n\x05Point\x12\x1d\n\x02id\x18\x01 \x01(\x0b\x32\x11.vectordb.PointID\x12\"\n\x07payload\x18\x02 \x01(\x0b\x32\x11.vectordb.Payload\x12%\n\x06vector\x18\x03 \x01(\x0b\x32\x15.vectordb.DenseVector\"%\n\x07PointID\x12\x1a\n\x02id\x18\x01 \x01(\x0b\x32\x0e.vectordb.UUID\"G\n\x07Payload\x12+\n\x0c\x63ontent_type\x18\x01 \x01(\x0e\x32\x15.vectordb.ContentType\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"K\n\x19InsertVectorsBatchRequest\x12.\n\x07vectors\x18\x01 \x03(\x0b\x32\x1d.vectordb.InsertVectorRequest\"<\n\x1aInsertVectorsBatchResponse\x12\x1e\n\x03ids\x18\x01 \x03(\x0b\x32\x11.vectordb.PointID\"D\n\x18SearchPointsBatchRequest\x12(\n\x07queries\x18\x01 \x03(\x0b\x32\x17.vectordb.SearchRequest\"F\n\x19SearchPointsBatchResponse\x12)\n\x07results\x18\x01 \x03(\x0b\x32\x18.vectordb.SearchResponse*C\n\nSimilarity\x12\r\n\tEuclidean\x10\x00\x12\r\n\tManhattan\x10\x01\x12\x0b\n\x07Hamming\x10\x02\x12\n\n\x06\x43osine\x10\x03*\"\n\x0b\x43ontentType\x12\t\n\x05Image\x10\x00\x12\x08\n\x04Text\x10\x01\x32\xc4\x03\n\x08VectorDB\x12\x42\n\x0cInsertVector\x12\x1d.vectordb.InsertVectorRequest\x1a\x11.vectordb.PointID\"\x00\x12:\n\x0b\x44\x65letePoint\x12\x11.vectordb.PointID\x1a\x16.google.protobuf.Empty\"\x00\x12\x30\n\x08GetPoint\x12\x11.vectordb.PointID\x1a\x0f.vectordb.Point\"\x00\x12\x43\n\x0cSearchPoints\x12\x17.vectordb.SearchRequest\x1a\x18.vectordb.SearchResponse\"\x00\x12\x61\n\x12InsertVectorsBatch\x12#.vectordb.InsertVectorsBatchRequest\x1a$.vectordb.InsertVectorsBatchResponse\"\x00\x12^\n\x11SearchPointsBatch\x12\".vectordb.SearchPointsBatchRequest\x1a#.vectordb.SearchPointsBatchResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fvector-db.proto\x12\x08vectordb\x1a\x1bgoogle/protobuf/empty.proto\"\x15\n\x04UUID\x12\r\n\x05value\x18\x01 \x01(\t\"\xab\x01\n\nPointInput\x12\x1d\n\x02id\x18\x01 \x01(\x0b\x32\x11.vectordb.PointID\x12+\n\x0c\x64\x65nse_vector\x18\x02 \x01(\x0b\x32\x15.vectordb.DenseVector\x12-\n\rsparse_vector\x18\x03 \x01(\x0b\x32\x16.vectordb.SparseVector\x12\"\n\x07payload\x18\x04 \x01(\x0b\x32\x11.vectordb.Payload\"u\n\nDenseQuery\x12%\n\x06vector\x18\x01 \x01(\x0b\x32\x15.vectordb.DenseVector\x12(\n\nsimilarity\x18\x02 \x01(\x0e\x32\x14.vectordb.Similarity\x12\x0f\n\x02\x65\x66\x18\x03 \x01(\x04H\x00\x88\x01\x01\x42\x05\n\x03_ef\"x\n\rSearchRequest\x12\r\n\x05limit\x18\x01 \x01(\x04\x12%\n\x05\x64\x65nse\x18\x02 \x01(\x0b\x32\x14.vectordb.DenseQueryH\x00\x12(\n\x06sparse\x18\x03 \x01(\x0b\x32\x16.vectordb.SparseVectorH\x00\x42\x07\n\x05query\"9\n\tSearchHit\x12\x1d\n\x02id\x18\x01 \x01(\x0b\x32\x11.vectordb.PointID\x12\r\n\x05score\x18\x02 \x01(\x02\"3\n\x0eSearchResponse\x12!\n\x04hits\x18\x01 \x03(\x0b\x32\x13.vectordb.SearchHit\"\x1d\n\x0b\x44\x65nseVector\x12\x0e\n\x06values\x18\x01 \x03(\x02\"2\n\x0cSparseVector\x12\x11\n\ttoken_ids\x18\x01 \x03(\r\x12\x0f\n\x07weights\x18\x02 \x03(\x02\"\xa6\x01\n\x05Point\x12\x1d\n\x02id\x18\x01 \x01(\x0b\x32\x11.vectordb.PointID\x12\"\n\x07payload\x18\x02 \x01(\x0b\x32\x11.vectordb.Payload\x12+\n\x0c\x64\x65nse_vector\x18\x03 \x01(\x0b\x32\x15.vectordb.DenseVector\x12-\n\rsparse_vector\x18\x04 \x01(\x0b\x32\x16.vectordb.SparseVector\"%\n\x07PointID\x12\x1a\n\x02id\x18\x01 \x01(\x0b\x32\x0e.vectordb.UUID\"G\n\x07Payload\x12+\n\x0c\x63ontent_type\x18\x01 \x01(\x0e\x32\x15.vectordb.ContentType\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"@\n\x18InsertPointsBatchRequest\x12$\n\x06points\x18\x01 \x03(\x0b\x32\x14.vectordb.PointInput\";\n\x19InsertPointsBatchResponse\x12\x1e\n\x03ids\x18\x01 \x03(\x0b\x32\x11.vectordb.PointID\">\n\x12SearchBatchRequest\x12(\n\x07queries\x18\x01 \x03(\x0b\x32\x17.vectordb.SearchRequest\"@\n\x13SearchBatchResponse\x12)\n\x07results\x18\x01 \x03(\x0b\x32\x18.vectordb.SearchResponse*C\n\nSimilarity\x12\r\n\tEuclidean\x10\x00\x12\r\n\tManhattan\x10\x01\x12\x0b\n\x07Hamming\x10\x02\x12\n\n\x06\x43osine\x10\x03*\"\n\x0b\x43ontentType\x12\t\n\x05Image\x10\x00\x12\x08\n\x04Text\x10\x01\x32\x9f\x03\n\x08VectorDB\x12\x38\n\x0bInsertPoint\x12\x14.vectordb.PointInput\x1a\x11.vectordb.PointID\"\x00\x12:\n\x0b\x44\x65letePoint\x12\x11.vectordb.PointID\x1a\x16.google.protobuf.Empty\"\x00\x12\x30\n\x08GetPoint\x12\x11.vectordb.PointID\x1a\x0f.vectordb.Point\"\x00\x12=\n\x06Search\x12\x17.vectordb.SearchRequest\x1a\x18.vectordb.SearchResponse\"\x00\x12^\n\x11InsertPointsBatch\x12\".vectordb.InsertPointsBatchRequest\x1a#.vectordb.InsertPointsBatchResponse\"\x00\x12L\n\x0bSearchBatch\x12\x1c.vectordb.SearchBatchRequest\x1a\x1d.vectordb.SearchBatchResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'vector_db_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SIMILARITY']._serialized_start=929
-  _globals['_SIMILARITY']._serialized_end=996
-  _globals['_CONTENTTYPE']._serialized_start=998
-  _globals['_CONTENTTYPE']._serialized_end=1032
+  _globals['_SIMILARITY']._serialized_start=1229
+  _globals['_SIMILARITY']._serialized_end=1296
+  _globals['_CONTENTTYPE']._serialized_start=1298
+  _globals['_CONTENTTYPE']._serialized_end=1332
   _globals['_UUID']._serialized_start=58
   _globals['_UUID']._serialized_end=79
-  _globals['_INSERTVECTORREQUEST']._serialized_start=81
-  _globals['_INSERTVECTORREQUEST']._serialized_end=177
-  _globals['_SEARCHREQUEST']._serialized_start=180
-  _globals['_SEARCHREQUEST']._serialized_end=309
-  _globals['_SEARCHRESPONSE']._serialized_start=311
-  _globals['_SEARCHRESPONSE']._serialized_end=388
-  _globals['_DENSEVECTOR']._serialized_start=390
-  _globals['_DENSEVECTOR']._serialized_end=419
-  _globals['_POINT']._serialized_start=421
-  _globals['_POINT']._serialized_end=534
-  _globals['_POINTID']._serialized_start=536
-  _globals['_POINTID']._serialized_end=573
-  _globals['_PAYLOAD']._serialized_start=575
-  _globals['_PAYLOAD']._serialized_end=646
-  _globals['_INSERTVECTORSBATCHREQUEST']._serialized_start=648
-  _globals['_INSERTVECTORSBATCHREQUEST']._serialized_end=723
-  _globals['_INSERTVECTORSBATCHRESPONSE']._serialized_start=725
-  _globals['_INSERTVECTORSBATCHRESPONSE']._serialized_end=785
-  _globals['_SEARCHPOINTSBATCHREQUEST']._serialized_start=787
-  _globals['_SEARCHPOINTSBATCHREQUEST']._serialized_end=855
-  _globals['_SEARCHPOINTSBATCHRESPONSE']._serialized_start=857
-  _globals['_SEARCHPOINTSBATCHRESPONSE']._serialized_end=927
-  _globals['_VECTORDB']._serialized_start=1035
-  _globals['_VECTORDB']._serialized_end=1487
+  _globals['_POINTINPUT']._serialized_start=82
+  _globals['_POINTINPUT']._serialized_end=253
+  _globals['_DENSEQUERY']._serialized_start=255
+  _globals['_DENSEQUERY']._serialized_end=372
+  _globals['_SEARCHREQUEST']._serialized_start=374
+  _globals['_SEARCHREQUEST']._serialized_end=494
+  _globals['_SEARCHHIT']._serialized_start=496
+  _globals['_SEARCHHIT']._serialized_end=553
+  _globals['_SEARCHRESPONSE']._serialized_start=555
+  _globals['_SEARCHRESPONSE']._serialized_end=606
+  _globals['_DENSEVECTOR']._serialized_start=608
+  _globals['_DENSEVECTOR']._serialized_end=637
+  _globals['_SPARSEVECTOR']._serialized_start=639
+  _globals['_SPARSEVECTOR']._serialized_end=689
+  _globals['_POINT']._serialized_start=692
+  _globals['_POINT']._serialized_end=858
+  _globals['_POINTID']._serialized_start=860
+  _globals['_POINTID']._serialized_end=897
+  _globals['_PAYLOAD']._serialized_start=899
+  _globals['_PAYLOAD']._serialized_end=970
+  _globals['_INSERTPOINTSBATCHREQUEST']._serialized_start=972
+  _globals['_INSERTPOINTSBATCHREQUEST']._serialized_end=1036
+  _globals['_INSERTPOINTSBATCHRESPONSE']._serialized_start=1038
+  _globals['_INSERTPOINTSBATCHRESPONSE']._serialized_end=1097
+  _globals['_SEARCHBATCHREQUEST']._serialized_start=1099
+  _globals['_SEARCHBATCHREQUEST']._serialized_end=1161
+  _globals['_SEARCHBATCHRESPONSE']._serialized_start=1163
+  _globals['_SEARCHBATCHRESPONSE']._serialized_end=1227
+  _globals['_VECTORDB']._serialized_start=1335
+  _globals['_VECTORDB']._serialized_end=1750
 # @@protoc_insertion_point(module_scope)

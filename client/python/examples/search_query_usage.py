@@ -1,5 +1,6 @@
 from vortexdb import VortexDB
-from vortexdb import Similarity, SearchQuery, to_dense_vectors
+from vortexdb import DenseQuery, PointInput, Similarity, SearchQuery, SparseVector
+from vortexdb import to_dense_vectors
 
 
 def main():
@@ -15,52 +16,36 @@ def main():
     ]
     vectors = to_dense_vectors(raw_vectors)
 
-    q = SearchQuery(
-        vector=vectors[0],
-        similarity=Similarity.COSINE,
-        limit=3,
+    point_ids = db.batch_insert(
+        points=[
+            PointInput(
+                dense_vector=vectors[0], sparse_vector=SparseVector([1, 5], [1.0, 0.5])
+            ),
+            PointInput(
+                dense_vector=vectors[1], sparse_vector=SparseVector([5, 9], [2.0, 1.0])
+            ),
+            PointInput(dense_vector=vectors[2]),
+        ]
     )
-    res = db.search(query=q)
-    print("Single SearchQuery:\n", res)
 
-    # List of SearchQuery
+    q = SearchQuery(limit=3, query=DenseQuery(vectors[0], Similarity.COSINE))
+    res = db.search(query=q)
+    print("Dense search:\n", res)
+
+    sparse_q = SearchQuery(limit=3, query=SparseVector([5], [1.0]))
+    res = db.search(query=sparse_q)
+    print("\nSparse search:\n", res)
+
     queries = [
-        SearchQuery(vectors[0], Similarity.HAMMING, 3),
-        SearchQuery(vectors[1], Similarity.EUCLIDEAN, 2),
-        q,
+        SearchQuery(3, DenseQuery(vectors[0], Similarity.HAMMING)),
+        SearchQuery(2, DenseQuery(vectors[1], Similarity.EUCLIDEAN)),
+        sparse_q,
     ]
     res = db.batch_search(queries=queries)
-    print("\nBatch SearchQuery:\n", res)
+    print("\nBatch search:\n", res)
 
-    # List of vectors with global Similarity and Limit
-    res = db.batch_search(
-        queries=vectors,
-        similarity=Similarity.COSINE,
-        limit=3,
-    )
-    print("\nList of DenseVectors:\n", res)
-
-    # List of tuple (DenseVector, Similarity) with global Limit
-    queries = [
-        (vectors[0], Similarity.COSINE),
-        (vectors[1], Similarity.MANHATTAN),
-    ]
-    res = db.batch_search(
-        queries=queries,
-        limit=3,
-    )
-    print("\nList of (DenseVector, Similarity):\n", res)
-
-    # List of tuple (DenseVector, Limit) with global Similarity
-    queries = [
-        (vectors[0], 2),
-        (vectors[1], 4),
-    ]
-    res = db.batch_search(
-        queries=queries,
-        similarity=Similarity.COSINE,
-    )
-    print("\nList of (DenseVector, Limit):\n", res)
+    for pid in point_ids:
+        db.delete(point_id=pid)
 
     db.close()
 

@@ -1,7 +1,8 @@
 use crate::constants::AUTHORIZATION_HEADER_KEY;
 use crate::service::vectordb::vector_db_client::VectorDbClient;
 use crate::service::vectordb::{
-    ContentType, DenseVector, InsertVectorRequest, Payload, PointId, SearchRequest,
+    ContentType, DenseQuery, DenseVector, InsertPointsBatchRequest, Payload, PointId, PointInput,
+    SearchBatchRequest, SearchRequest, SparseVector, Uuid, search_request,
 };
 use crate::service::{VectorDBService, run_server};
 use crate::utils::ServerEndpoint;
@@ -79,6 +80,35 @@ async fn create_test_client(
     Ok(VectorDbClient::new(channel))
 }
 
+fn dense_search(values: Vec<f32>, similarity: i32, limit: u64) -> SearchRequest {
+    SearchRequest {
+        limit,
+        query: Some(search_request::Query::Dense(DenseQuery {
+            vector: Some(DenseVector { values }),
+            similarity,
+            ef: None,
+        })),
+    }
+}
+
+fn sparse_search(token_ids: Vec<u32>, weights: Vec<f32>, limit: u64) -> SearchRequest {
+    SearchRequest {
+        limit,
+        query: Some(search_request::Query::Sparse(SparseVector {
+            token_ids,
+            weights,
+        })),
+    }
+}
+
+fn point_id(value: &str) -> PointId {
+    PointId {
+        id: Some(Uuid {
+            value: value.to_string(),
+        }),
+    }
+}
+
 #[tokio::test]
 async fn test_grpc_server_start() {
     let (server_addr, _temp_dir) = start_test_server().await.unwrap();
@@ -87,15 +117,16 @@ async fn test_grpc_server_start() {
     // insert a test vector
     let test_vec = vec![1.0, 2.0, 3.0];
 
-    let mut request = tonic::Request::new(InsertVectorRequest {
-        vector: Some(DenseVector {
+    let mut request = tonic::Request::new(PointInput {
+        dense_vector: Some(DenseVector {
             values: test_vec.clone(),
         }),
         payload: Some(Payload::default()),
+        ..Default::default()
     });
     append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
 
-    let status = client.insert_vector(request).await.is_ok();
+    let status = client.insert_point(request).await.is_ok();
     assert!(status);
 }
 
@@ -107,18 +138,19 @@ async fn test_insert_vector_rpc() {
     // insert a test vector
     let test_vec = vec![1.0, 2.0, 3.0];
 
-    let mut request = tonic::Request::new(InsertVectorRequest {
-        vector: Some(DenseVector {
+    let mut request = tonic::Request::new(PointInput {
+        dense_vector: Some(DenseVector {
             values: test_vec.clone(),
         }),
         payload: Some(Payload {
             content_type: ContentType::Text as i32,
             content: "test".to_string(),
         }),
+        ..Default::default()
     });
     append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
 
-    let resp = client.insert_vector(request).await;
+    let resp = client.insert_point(request).await;
 
     // check if request is successful
     assert!(resp.is_ok());
@@ -133,7 +165,7 @@ async fn test_insert_vector_rpc() {
     // check if request is successful
     assert!(resp.is_ok());
     let point = resp.unwrap().into_inner();
-    assert_eq!(point.vector.unwrap().values, test_vec);
+    assert_eq!(point.dense_vector.unwrap().values, test_vec);
 
     // payload assertions
     let payload = point.payload.unwrap();
@@ -141,15 +173,16 @@ async fn test_insert_vector_rpc() {
     assert_eq!(payload.content, "test");
 
     // insert a new vector with mismatched dimensions
-    let mut request = tonic::Request::new(InsertVectorRequest {
-        vector: Some(DenseVector {
+    let mut request = tonic::Request::new(PointInput {
+        dense_vector: Some(DenseVector {
             values: vec![1.0, 2.0],
         }),
         payload: Some(Payload::default()),
+        ..Default::default()
     });
     append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
 
-    let resp = client.insert_vector(request).await;
+    let resp = client.insert_point(request).await;
 
     // request must fail
     assert!(resp.is_err());
@@ -162,15 +195,16 @@ async fn test_delete_vector_rpc() {
 
     // insert a test vector
     let test_vec = vec![1.0, 2.0, 3.0];
-    let mut request = tonic::Request::new(InsertVectorRequest {
-        vector: Some(DenseVector {
+    let mut request = tonic::Request::new(PointInput {
+        dense_vector: Some(DenseVector {
             values: test_vec.clone(),
         }),
         payload: Some(Payload::default()),
+        ..Default::default()
     });
     append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
 
-    let resp = client.insert_vector(request).await;
+    let resp = client.insert_point(request).await;
 
     // check if request is successful
     assert!(resp.is_ok());
@@ -204,15 +238,16 @@ async fn test_search_vector_rpc() {
 
     // insert a test vector
     let test_vec = vec![1.0, 2.0, 3.0];
-    let mut request = tonic::Request::new(InsertVectorRequest {
-        vector: Some(DenseVector {
+    let mut request = tonic::Request::new(PointInput {
+        dense_vector: Some(DenseVector {
             values: test_vec.clone(),
         }),
         payload: Some(Payload::default()),
+        ..Default::default()
     });
     append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
 
-    let resp = client.insert_vector(request).await;
+    let resp = client.insert_point(request).await;
 
     // check if request is successful
     assert!(resp.is_ok());
@@ -221,28 +256,21 @@ async fn test_search_vector_rpc() {
     let query_vec = vec![2.0, 2.0, 2.0];
 
     // search for the vector
-    let mut request = tonic::Request::new(SearchRequest {
-        query_vector: Some(DenseVector {
-            values: query_vec.clone(),
-        }),
-        similarity: 0, // euclidean distance
-        limit: 1,
-        ef: 0,
-    });
+    let mut request = tonic::Request::new(dense_search(query_vec.clone(), 0, 1));
     append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
 
-    let resp = client.search_points(request).await;
+    let resp = client.search(request).await;
 
     // check if request is successful
     assert!(resp.is_ok());
     let result = resp.unwrap().into_inner();
 
     // 1 vector has to be returned
-    assert_eq!(result.result_point_ids.len(), 1);
+    assert_eq!(result.hits.len(), 1);
 
     // check if the returned point id matches the inserted point id
-    assert_eq!(result.result_point_ids[0], PointId { id: point.id });
-    assert_eq!(result.scores, vec![2f32.sqrt()]);
+    assert_eq!(result.hits[0].id, Some(PointId { id: point.id }));
+    assert_eq!(result.hits[0].score, 2f32.sqrt());
 }
 
 #[tokio::test]
@@ -252,15 +280,16 @@ async fn test_unauthorized_rpc() {
 
     // insert a test vector
     let test_vec = vec![1.0, 2.0, 3.0];
-    let mut request = tonic::Request::new(InsertVectorRequest {
-        vector: Some(DenseVector {
+    let mut request = tonic::Request::new(PointInput {
+        dense_vector: Some(DenseVector {
             values: test_vec.clone(),
         }),
         payload: Some(Payload::default()),
+        ..Default::default()
     });
 
     append_test_auth_header(&mut request, "43121");
-    let resp = client.insert_vector(request).await;
+    let resp = client.insert_point(request).await;
 
     // request must fail
     assert!(resp.is_err());
@@ -271,15 +300,16 @@ async fn test_readonly_key_cannot_write() {
     let (server_addr, _temp_dir) = start_test_server().await.unwrap();
     let mut client = create_test_client(server_addr).await.unwrap();
 
-    let mut request = tonic::Request::new(InsertVectorRequest {
-        vector: Some(DenseVector {
+    let mut request = tonic::Request::new(PointInput {
+        dense_vector: Some(DenseVector {
             values: vec![1.0, 2.0, 3.0],
         }),
         payload: Some(Payload::default()),
+        ..Default::default()
     });
     append_test_auth_header(&mut request, TEST_READONLY_BEARER_TOKEN);
 
-    let resp = client.insert_vector(request).await;
+    let resp = client.insert_point(request).await;
 
     assert_eq!(resp.unwrap_err().code(), tonic::Code::PermissionDenied);
 }
@@ -289,17 +319,95 @@ async fn test_readonly_key_can_search() {
     let (server_addr, _temp_dir) = start_test_server().await.unwrap();
     let mut client = create_test_client(server_addr).await.unwrap();
 
-    let mut request = tonic::Request::new(SearchRequest {
-        query_vector: Some(DenseVector {
-            values: vec![1.0, 2.0, 3.0],
-        }),
-        similarity: 0,
-        limit: 1,
-        ef: 0,
-    });
+    let mut request = tonic::Request::new(dense_search(vec![1.0, 2.0, 3.0], 0, 1));
     append_test_auth_header(&mut request, TEST_READONLY_BEARER_TOKEN);
 
-    let resp = client.search_points(request).await;
+    let resp = client.search(request).await;
 
     assert!(resp.is_ok());
+}
+
+#[tokio::test]
+async fn test_sparse_and_mixed_batch_rpc() {
+    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
+    let mut client = create_test_client(server_addr).await.unwrap();
+    let sparse_id = "00000000-0000-0000-0000-000000000002";
+
+    let mut request = tonic::Request::new(InsertPointsBatchRequest {
+        points: vec![
+            PointInput {
+                dense_vector: Some(DenseVector {
+                    values: vec![1.0, 0.0, 0.0],
+                }),
+                ..Default::default()
+            },
+            PointInput {
+                id: Some(point_id(sparse_id)),
+                sparse_vector: Some(SparseVector {
+                    token_ids: vec![1, 4],
+                    weights: vec![0.5, 2.0],
+                }),
+                ..Default::default()
+            },
+        ],
+    });
+    append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
+    let ids = client
+        .insert_points_batch(request)
+        .await
+        .unwrap()
+        .into_inner()
+        .ids;
+    assert_eq!(ids[1], point_id(sparse_id));
+
+    let mut request = tonic::Request::new(point_id(sparse_id));
+    append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
+    let point = client.get_point(request).await.unwrap().into_inner();
+    assert!(point.dense_vector.is_none());
+    assert_eq!(point.sparse_vector.unwrap().token_ids, vec![1, 4]);
+
+    let mut request = tonic::Request::new(SearchBatchRequest {
+        queries: vec![
+            dense_search(vec![1.0, 0.0, 0.0], 3, 5),
+            sparse_search(vec![4], vec![1.0], 5),
+        ],
+    });
+    append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
+    let results = client
+        .search_batch(request)
+        .await
+        .unwrap()
+        .into_inner()
+        .results;
+    assert_eq!(results[0].hits[0].id, Some(ids[0].clone()));
+    assert_eq!(results[1].hits.len(), 1);
+    assert_eq!(results[1].hits[0].id, Some(point_id(sparse_id)));
+    assert_eq!(results[1].hits[0].score, 2.0);
+}
+
+#[tokio::test]
+async fn test_invalid_requests_return_invalid_argument() {
+    let (server_addr, _temp_dir) = start_test_server().await.unwrap();
+    let mut client = create_test_client(server_addr).await.unwrap();
+
+    let mut request = tonic::Request::new(point_id("not-a-uuid"));
+    append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
+    let status = client.get_point(request).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
+
+    let mut request = tonic::Request::new(SearchRequest {
+        limit: 1,
+        query: None,
+    });
+    append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
+    let status = client.search(request).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
+
+    let mut request = tonic::Request::new(PointInput {
+        payload: Some(Payload::default()),
+        ..Default::default()
+    });
+    append_test_auth_header(&mut request, TEST_AUTH_BEARER_TOKEN);
+    let status = client.insert_point(request).await.unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }

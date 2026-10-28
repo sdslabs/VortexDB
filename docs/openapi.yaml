@@ -61,16 +61,21 @@ paths:
       tags:
         - Points
       summary: Insert a point
-      description: Insert a new vector with its associated payload
+      description: |
+        Insert a point with a dense vector, a sparse vector, or both, plus an optional payload.
+        The id is generated when omitted.
       operationId: insertPoint
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InsertRequest'
+              $ref: '#/components/schemas/PointInput'
             example:
-              vector: [0.1, 0.2, 0.3, 0.4]
+              dense_vector: [0.1, 0.2, 0.3, 0.4]
+              sparse_vector:
+                token_ids: [3, 17, 42]
+                weights: [0.5, 1.2, 0.8]
               payload:
                 content_type: Text
                 content: Hello, VortexDB!
@@ -84,26 +89,33 @@ paths:
               example:
                 point_id: 550e8400-e29b-41d4-a716-446655440000
         '400':
-          description: Invalid request
+          description: Invalid request (no vector, wrong dense dimension, or invalid sparse vector)
           content:
             text/plain:
               schema:
                 type: string
-                example: Invalid vector dimensions
+                example: "Dimension mismatch: expected 4, got 3"
+        '409':
+          description: A point with this id already exists
+          content:
+            text/plain:
+              schema:
+                type: string
         '500':
           description: Server error
           content:
             text/plain:
               schema:
                 type: string
-                example: Failed to insert point
 
   /points/batch:
     post:
       tags:
         - Points
       summary: Batch insert points
-      description: Insert multiple vectors in a single request
+      description: |
+        Insert multiple points in a single request. The whole batch is validated
+        before anything is written, so one invalid point rejects the batch.
       operationId: batchInsertPoints
       requestBody:
         required: true
@@ -112,28 +124,35 @@ paths:
             schema:
               $ref: '#/components/schemas/BatchInsertRequest'
             example:
-              vectors:
-                - vector: [0.1, 0.2, 0.3, 0.4]
+              points:
+                - dense_vector: [0.1, 0.2, 0.3, 0.4]
                   payload:
                     content_type: Text
                     content: Document one
-                - vector: [0.5, 0.6, 0.7, 0.8]
-                  payload:
-                    content_type: Text
-                    content: Document two
+                - id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+                  sparse_vector:
+                    token_ids: [2, 9]
+                    weights: [1.0, 0.25]
       responses:
-        '201':
+        '200':
           description: Points created successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BatchInsertResponse'
               example:
-                point_ids:
+                inserted: 2
+                ids:
                   - 550e8400-e29b-41d4-a716-446655440000
                   - 6ba7b810-9dad-11d1-80b4-00c04fd430c8
         '400':
           description: Invalid request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '409':
+          description: A point id already exists or is repeated in the batch
           content:
             text/plain:
               schema:
@@ -170,7 +189,8 @@ paths:
                 $ref: '#/components/schemas/Point'
               example:
                 id: 550e8400-e29b-41d4-a716-446655440000
-                vector: [0.1, 0.2, 0.3, 0.4]
+                dense_vector: [0.1, 0.2, 0.3, 0.4]
+                sparse_vector: null
                 payload:
                   content_type: Text
                   content: Hello, VortexDB!
@@ -193,7 +213,7 @@ paths:
       tags:
         - Points
       summary: Delete a point
-      description: Delete a point by its ID
+      description: Delete a point by its ID. The point is removed from both the dense and the sparse index.
       operationId: deletePoint
       parameters:
         - name: point_id
@@ -219,19 +239,32 @@ paths:
     post:
       tags:
         - Points
-      summary: Search for similar vectors
-      description: Find the k nearest neighbors to a query vector
+      summary: Search points
+      description: |
+        Find the nearest points to a dense or a sparse query.
+        `query` must contain exactly one of `dense` or `sparse`.
       operationId: searchPoints
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SearchRequest'
-            example:
-              vector: [0.1, 0.2, 0.3, 0.4]
-              similarity: Cosine
-              limit: 5
+              $ref: '#/components/schemas/SearchQuery'
+            examples:
+              dense:
+                value:
+                  limit: 5
+                  query:
+                    dense:
+                      vector: [0.1, 0.2, 0.3, 0.4]
+                      similarity: Cosine
+              sparse:
+                value:
+                  limit: 5
+                  query:
+                    sparse:
+                      token_ids: [3, 17]
+                      weights: [1.0, 0.5]
       responses:
         '200':
           description: Search results
@@ -240,16 +273,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/SearchResponse'
               example:
-                results:
-                  - 550e8400-e29b-41d4-a716-446655440000
-                  - 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+                hits:
+                  - id: 550e8400-e29b-41d4-a716-446655440000
+                    score: 0.012
+                  - id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+                    score: 0.087
         '400':
           description: Invalid request
           content:
             text/plain:
               schema:
                 type: string
-                example: Invalid vector dimensions
+                example: "Dimension mismatch: expected 4, got 3"
         '500':
           description: Server error
           content:
@@ -262,8 +297,8 @@ paths:
     post:
       tags:
         - Points
-      summary: Batch search for similar vectors
-      description: Search against multiple query vectors in a single request
+      summary: Batch search points
+      description: Run multiple dense and/or sparse queries in a single request
       operationId: batchSearchPoints
       requestBody:
         required: true
@@ -273,12 +308,16 @@ paths:
               $ref: '#/components/schemas/BatchSearchRequest'
             example:
               queries:
-                - vector: [0.1, 0.2, 0.3, 0.4]
-                  similarity: Cosine
-                  limit: 2
-                - vector: [0.5, 0.6, 0.7, 0.8]
-                  similarity: Euclidean
-                  limit: 2
+                - limit: 2
+                  query:
+                    dense:
+                      vector: [0.1, 0.2, 0.3, 0.4]
+                      similarity: Cosine
+                - limit: 2
+                  query:
+                    sparse:
+                      token_ids: [3, 17]
+                      weights: [1.0, 0.5]
       responses:
         '200':
           description: Batch search results
@@ -288,9 +327,12 @@ paths:
                 $ref: '#/components/schemas/BatchSearchResponse'
               example:
                 results:
-                  - - 550e8400-e29b-41d4-a716-446655440000
-                    - 6ba7b810-9dad-11d1-80b4-00c04fd430c8
-                  - - f47ac10b-58cc-4372-a567-0e02b2c3d479
+                  - hits:
+                      - id: 550e8400-e29b-41d4-a716-446655440000
+                        score: 0.012
+                  - hits:
+                      - id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                        score: 1.5
         '400':
           description: Invalid request
           content:
@@ -311,8 +353,30 @@ components:
       items:
         type: number
         format: float
-      description: Array of floating-point values representing the vector
+      description: Array of floating-point values; its length must match the database dimension
       example: [0.1, 0.2, 0.3, 0.4]
+
+    SparseVector:
+      type: object
+      required:
+        - token_ids
+        - weights
+      properties:
+        token_ids:
+          type: array
+          items:
+            type: integer
+            format: uint32
+          description: Non-empty, strictly increasing token ids
+          example: [3, 17, 42]
+        weights:
+          type: array
+          items:
+            type: number
+            format: float
+            minimum: 0
+          description: Finite, non-negative weights, one per token id
+          example: [0.5, 1.2, 0.8]
 
     ContentType:
       type: string
@@ -354,27 +418,37 @@ components:
       type: object
       required:
         - id
-        - vector
-        - payload
       properties:
         id:
           type: string
           format: uuid
           description: Unique identifier for the point
           example: 550e8400-e29b-41d4-a716-446655440000
-        vector:
-          $ref: '#/components/schemas/DenseVector'
+        dense_vector:
+          allOf:
+            - $ref: '#/components/schemas/DenseVector'
+          nullable: true
+        sparse_vector:
+          allOf:
+            - $ref: '#/components/schemas/SparseVector'
+          nullable: true
         payload:
-          $ref: '#/components/schemas/Payload'
+          allOf:
+            - $ref: '#/components/schemas/Payload'
+          nullable: true
 
-    InsertRequest:
+    PointInput:
       type: object
-      required:
-        - vector
-        - payload
+      description: At least one of `dense_vector` or `sparse_vector` is required
       properties:
-        vector:
+        id:
+          type: string
+          format: uuid
+          description: Optional id; generated when omitted
+        dense_vector:
           $ref: '#/components/schemas/DenseVector'
+        sparse_vector:
+          $ref: '#/components/schemas/SparseVector'
         payload:
           $ref: '#/components/schemas/Payload'
 
@@ -392,57 +466,98 @@ components:
     BatchInsertRequest:
       type: object
       required:
-        - vectors
+        - points
       properties:
-        vectors:
+        points:
           type: array
           items:
-            $ref: '#/components/schemas/InsertRequest'
-          description: Array of insert objects
+            $ref: '#/components/schemas/PointInput'
 
     BatchInsertResponse:
       type: object
       required:
-        - point_ids
+        - inserted
+        - ids
       properties:
-        point_ids:
+        inserted:
+          type: integer
+          description: Number of points inserted
+        ids:
           type: array
           items:
             type: string
             format: uuid
           description: UUIDs of the created points, in input order
 
-    SearchRequest:
+    DenseQuery:
       type: object
       required:
         - vector
         - similarity
-        - limit
       properties:
         vector:
           $ref: '#/components/schemas/DenseVector'
         similarity:
           $ref: '#/components/schemas/Similarity'
+        ef:
+          type: integer
+          nullable: true
+          description: HNSW search breadth; ignored by other indexes
+
+    QueryVector:
+      type: object
+      description: Exactly one of `dense` or `sparse`
+      oneOf:
+        - required: [dense]
+          properties:
+            dense:
+              $ref: '#/components/schemas/DenseQuery'
+        - required: [sparse]
+          properties:
+            sparse:
+              $ref: '#/components/schemas/SparseVector'
+
+    SearchQuery:
+      type: object
+      required:
+        - limit
+        - query
+      properties:
         limit:
           type: integer
           minimum: 1
+          maximum: 10000
           description: Maximum number of results to return
           example: 5
+        query:
+          $ref: '#/components/schemas/QueryVector'
+
+    SearchHit:
+      type: object
+      required:
+        - id
+        - score
+      properties:
+        id:
+          type: string
+          format: uuid
+        score:
+          type: number
+          format: float
+          description: |
+            Dense queries return a distance (lower is closer).
+            Sparse queries return a dot product (higher is closer).
 
     SearchResponse:
       type: object
       required:
-        - results
+        - hits
       properties:
-        results:
+        hits:
           type: array
           items:
-            type: string
-            format: uuid
-          description: Array of point IDs ordered by similarity (closest first)
-          example:
-            - 550e8400-e29b-41d4-a716-446655440000
-            - 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+            $ref: '#/components/schemas/SearchHit'
+          description: Hits ordered best first
 
     BatchSearchRequest:
       type: object
@@ -452,8 +567,7 @@ components:
         queries:
           type: array
           items:
-            $ref: '#/components/schemas/SearchRequest'
-          description: Array of search query objects
+            $ref: '#/components/schemas/SearchQuery'
 
     BatchSearchResponse:
       type: object
@@ -463,8 +577,5 @@ components:
         results:
           type: array
           items:
-            type: array
-            items:
-              type: string
-              format: uuid
-          description: One result array per input query
+            $ref: '#/components/schemas/SearchResponse'
+          description: One response per input query, in order

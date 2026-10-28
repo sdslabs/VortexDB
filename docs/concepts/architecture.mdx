@@ -38,10 +38,12 @@ The **gRPC layer** is the primary high-performance interface:
 
 ```protobuf
 service VectorDB {
-  rpc InsertVector(InsertVectorRequest) returns (PointID);
+  rpc InsertPoint(PointInput) returns (PointID);
+  rpc InsertPointsBatch(InsertPointsBatchRequest) returns (InsertPointsBatchResponse);
   rpc DeletePoint(PointID) returns (google.protobuf.Empty);
   rpc GetPoint(PointID) returns (Point);
-  rpc SearchPoints(SearchRequest) returns (SearchResponse);
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc SearchBatch(SearchBatchRequest) returns (SearchBatchResponse);
 }
 ```
 

@@ -23,7 +23,9 @@ fn test_insert_and_get_vector() {
     let vector = Some(vec![0.1, 0.2, 0.3]);
     let payload = Some(test_payload("Test"));
 
-    storage.insert_point(id, vector.clone(), payload).unwrap();
+    storage
+        .insert_point(id, vector.clone(), None, payload)
+        .unwrap();
 
     assert_eq!(storage.get_vector(id).unwrap(), vector);
 }
@@ -34,9 +36,17 @@ fn test_insert_and_get_payload() {
     let id = Uuid::new_v4();
     let payload = Some(test_payload("Test"));
 
-    storage.insert_point(id, None, payload.clone()).unwrap();
+    storage
+        .insert_point(id, None, None, payload.clone())
+        .unwrap();
 
-    assert_eq!(storage.get_payload(id).unwrap(), payload);
+    assert_eq!(
+        storage
+            .get_point(id)
+            .unwrap()
+            .and_then(|point| point.payload),
+        payload
+    );
 }
 
 #[test]
@@ -47,18 +57,29 @@ fn test_contains_and_delete_point() {
     assert!(!storage.contains_point(id).unwrap());
 
     storage
-        .insert_point(id, Some(vec![0.4, 0.5, 0.6]), Some(test_payload("Test")))
+        .insert_point(
+            id,
+            Some(vec![0.4, 0.5, 0.6]),
+            None,
+            Some(test_payload("Test")),
+        )
         .unwrap();
     assert!(storage.contains_point(id).unwrap());
 
     storage.delete_point(id).unwrap();
     assert!(!storage.contains_point(id).unwrap());
     assert_eq!(storage.get_vector(id).unwrap(), None);
-    assert_eq!(storage.get_payload(id).unwrap(), None);
+    assert_eq!(
+        storage
+            .get_point(id)
+            .unwrap()
+            .and_then(|point| point.payload),
+        None
+    );
 }
 
 #[test]
-fn test_list_vectors_respects_offset_limit_and_skips_payload_only_points() {
+fn test_list_points_respects_offset_and_limit() {
     let storage = create_test_storage();
     let ids = [
         Uuid::from_u128(1),
@@ -66,37 +87,70 @@ fn test_list_vectors_respects_offset_limit_and_skips_payload_only_points() {
         Uuid::from_u128(3),
         Uuid::from_u128(4),
     ];
+    let sparse_vector = SparseVector {
+        token_ids: vec![7, 9],
+        weights: vec![0.5, 1.5],
+    };
 
     storage
-        .insert_point(ids[0], Some(vec![1.0, 1.1]), Some(test_payload("one")))
+        .insert_point(ids[0], Some(vec![1.0, 1.1]), None, None)
         .unwrap();
     storage
-        .insert_point(ids[1], None, Some(test_payload("payload-only")))
+        .insert_point(ids[1], None, Some(sparse_vector.clone()), None)
         .unwrap();
     storage
-        .insert_point(ids[2], Some(vec![3.0, 3.1]), Some(test_payload("three")))
+        .insert_point(ids[2], None, None, Some(test_payload("payload-only")))
         .unwrap();
     storage
-        .insert_point(ids[3], Some(vec![4.0, 4.1]), Some(test_payload("four")))
+        .insert_point(ids[3], Some(vec![4.0, 4.1]), None, None)
         .unwrap();
 
-    let (first_page, next_offset) = storage.list_vectors(Uuid::nil(), 2).unwrap().unwrap();
-    assert_eq!(
-        first_page,
-        vec![(ids[0], vec![1.0, 1.1]), (ids[2], vec![3.0, 3.1])]
-    );
-    assert_eq!(next_offset, ids[2]);
+    let (first_page, next_offset) = storage.list_points(Uuid::nil(), 2).unwrap().unwrap();
+    let first_ids: Vec<PointId> = first_page.iter().map(|point| point.id).collect();
+    assert_eq!(first_ids, vec![ids[0], ids[1]]);
+    assert_eq!(first_page[1].sparse_vector, Some(sparse_vector));
+    assert_eq!(next_offset, ids[1]);
 
-    let (second_page, next_offset) = storage.list_vectors(next_offset, 2).unwrap().unwrap();
-    assert_eq!(second_page, vec![(ids[3], vec![4.0, 4.1])]);
+    let (second_page, next_offset) = storage.list_points(next_offset, 2).unwrap().unwrap();
+    let second_ids: Vec<PointId> = second_page.iter().map(|point| point.id).collect();
+    assert_eq!(second_ids, vec![ids[2], ids[3]]);
+    assert_eq!(next_offset, ids[3]);
+
+    let (empty_page, next_offset) = storage.list_points(next_offset, 2).unwrap().unwrap();
+    assert!(empty_page.is_empty());
     assert_eq!(next_offset, ids[3]);
 }
 
 #[test]
-fn test_list_vectors_with_zero_limit_returns_none() {
+fn test_list_points_with_zero_limit_returns_none() {
     let storage = create_test_storage();
 
-    assert_eq!(storage.list_vectors(Uuid::nil(), 0).unwrap(), None);
+    assert_eq!(storage.list_points(Uuid::nil(), 0).unwrap(), None);
+}
+
+#[test]
+fn test_get_point_returns_all_fields() {
+    let storage = create_test_storage();
+    let id = Uuid::new_v4();
+    let sparse_vector = SparseVector {
+        token_ids: vec![1],
+        weights: vec![2.0],
+    };
+
+    storage
+        .insert_point(
+            id,
+            Some(vec![0.1, 0.2]),
+            Some(sparse_vector.clone()),
+            Some(test_payload("both")),
+        )
+        .unwrap();
+
+    let point = storage.get_point(id).unwrap().unwrap();
+    assert_eq!(point.dense_vector, Some(vec![0.1, 0.2]));
+    assert_eq!(point.sparse_vector, Some(sparse_vector));
+    assert_eq!(point.payload, Some(test_payload("both")));
+    assert_eq!(storage.get_point(Uuid::new_v4()).unwrap(), None);
 }
 
 #[test]
@@ -110,6 +164,7 @@ fn test_create_and_restore_checkpoint() {
         .insert_point(
             id_before_checkpoint,
             Some(vec![0.1, 0.2, 0.3]),
+            None,
             Some(test_payload("before")),
         )
         .unwrap();
@@ -119,6 +174,7 @@ fn test_create_and_restore_checkpoint() {
         .insert_point(
             id_after_checkpoint,
             Some(vec![0.4, 0.5, 0.6]),
+            None,
             Some(test_payload("after")),
         )
         .unwrap();
@@ -128,7 +184,10 @@ fn test_create_and_restore_checkpoint() {
     assert!(storage.contains_point(id_before_checkpoint).unwrap());
     assert!(!storage.contains_point(id_after_checkpoint).unwrap());
     assert_eq!(
-        storage.get_payload(id_before_checkpoint).unwrap(),
+        storage
+            .get_point(id_before_checkpoint)
+            .unwrap()
+            .and_then(|point| point.payload),
         Some(test_payload("before"))
     );
 }
@@ -140,7 +199,12 @@ fn test_checkpoint_writes_header() {
     let id = Uuid::new_v4();
 
     storage
-        .insert_point(id, Some(vec![0.1, 0.2, 0.3]), Some(test_payload("point")))
+        .insert_point(
+            id,
+            Some(vec![0.1, 0.2, 0.3]),
+            None,
+            Some(test_payload("point")),
+        )
         .unwrap();
     let checkpoint = storage.checkpoint_at(temp_dir.path()).unwrap();
 

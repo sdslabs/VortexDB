@@ -1,7 +1,8 @@
 import asyncio
 
 from vortexdb import AsyncVortexDB
-from vortexdb import Payload, Similarity, SearchQuery, to_dense_vectors
+from vortexdb import DenseQuery, PointInput, Similarity, SearchQuery, SparseVector
+from vortexdb import to_dense_vectors
 
 
 async def main():
@@ -16,66 +17,35 @@ async def main():
         ]
         vectors = to_dense_vectors(raw_vectors)
 
-        p1 = Payload.text("hello world")
-        p2 = Payload.image("/img/a.png")
-        p3 = Payload.text("foo bar")
-
-        items = [
-            (vectors[0], p1),
-            (vectors[1], p2),
-            (vectors[2], p3),
-        ]
-
-        # Batch Insert
-        point_ids = await db.batch_insert(items=items)
-        print("Inserted ids:\n", point_ids)
-
-        q = SearchQuery(
-            vector=vectors[0],
-            similarity=Similarity.COSINE,
-            limit=3,
+        point_ids = await db.batch_insert(
+            points=[
+                PointInput(
+                    dense_vector=vectors[0],
+                    sparse_vector=SparseVector([1, 5], [1.0, 0.5]),
+                ),
+                PointInput(
+                    dense_vector=vectors[1],
+                    sparse_vector=SparseVector([5, 9], [2.0, 1.0]),
+                ),
+                PointInput(dense_vector=vectors[2]),
+            ]
         )
-        res = await db.search(query=q)
-        print("\nSingle SearchQuery:\n", res)
 
-        # List of SearchQuery
+        q = SearchQuery(limit=3, query=DenseQuery(vectors[0], Similarity.COSINE))
+        res = await db.search(query=q)
+        print("Dense search:\n", res)
+
+        sparse_q = SearchQuery(limit=3, query=SparseVector([5], [1.0]))
+        res = await db.search(query=sparse_q)
+        print("\nSparse search:\n", res)
+
         queries = [
-            SearchQuery(vectors[0], Similarity.HAMMING, 3),
-            SearchQuery(vectors[1], Similarity.EUCLIDEAN, 2),
-            q,
+            SearchQuery(3, DenseQuery(vectors[0], Similarity.HAMMING)),
+            SearchQuery(2, DenseQuery(vectors[1], Similarity.EUCLIDEAN)),
+            sparse_q,
         ]
         res = await db.batch_search(queries=queries)
-        print("\nBatch SearchQuery:\n", res)
-
-        # List of vectors with global Similarity and Limit
-        res = await db.batch_search(
-            queries=vectors,
-            similarity=Similarity.COSINE,
-            limit=3,
-        )
-        print("\nList of DenseVectors:\n", res)
-
-        # List of tuple (DenseVector, Similarity) with global Limit
-        queries = [
-            (vectors[0], Similarity.COSINE),
-            (vectors[1], Similarity.MANHATTAN),
-        ]
-        res = await db.batch_search(
-            queries=queries,
-            limit=3,
-        )
-        print("\nList of (DenseVector, Similarity):\n", res)
-
-        # List of tuple (DenseVector, Limit) with global Similarity
-        queries = [
-            (vectors[0], 2),
-            (vectors[1], 4),
-        ]
-        res = await db.batch_search(
-            queries=queries,
-            similarity=Similarity.COSINE,
-        )
-        print("\nList of (DenseVector, Limit):\n", res)
+        print("\nBatch search:\n", res)
 
         for pid in point_ids:
             await db.delete(point_id=pid)

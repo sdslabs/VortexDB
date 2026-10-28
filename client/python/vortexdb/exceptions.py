@@ -14,6 +14,10 @@ class InvalidArgumentError(VortexDBError):
     """Invalid input was provided"""
 
 
+class AlreadyExistsError(VortexDBError):
+    """A point with the given id already exists"""
+
+
 class TimeoutError(VortexDBError):
     """Request timed out while communicating with the server"""
 

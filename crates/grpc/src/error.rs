@@ -57,6 +57,15 @@ impl From<api::error::ApiError> for GrpcError {
                 message: format!("invalid search limit: {}", limit),
             },
             ApiError::InitializationFailed { reason } => GrpcError::Internal { message: reason },
+            ApiError::PointAlreadyExists { id } => GrpcError::AlreadyExists {
+                message: format!("point already exists: {}", id),
+            },
+            ApiError::MissingVector { id } => GrpcError::InvalidArgument {
+                message: format!("point has neither a dense nor a sparse vector: {}", id),
+            },
+            ApiError::InvalidSparseVector { source } => GrpcError::InvalidArgument {
+                message: format!("invalid sparse vector: {}", source),
+            },
         }
     }
 }

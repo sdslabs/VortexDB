@@ -5,13 +5,17 @@ import pytest
 
 from vortexdb.async_client import AsyncVortexDB
 from vortexdb.async_connection import AsyncGRPCConnection
+from vortexdb.grpc import vector_db_pb2 as pb
 from vortexdb.models import (
-    ContentType,
+    DenseQuery,
     DenseVector,
     Payload,
     Point,
-    Similarity,
+    PointInput,
+    SearchHit,
     SearchQuery,
+    Similarity,
+    SparseVector,
 )
 
 
@@ -36,20 +40,37 @@ def client(mock_connection):
     )
 
 
-def test_async_insert_success(client, mock_connection):
+def test_async_insert_dense_point(client, mock_connection):
     async def run():
-        response = Mock()
-        response.id = Mock()
-        response.id.value = "point-123"
-
-        mock_connection.call.return_value = response
+        mock_connection.call.return_value = pb.PointID(id=pb.UUID(value="point-123"))
 
         point_id = await client.insert(
-            vector=DenseVector([1, 2, 3]),
+            dense_vector=DenseVector([1, 2, 3]),
             payload=Payload.text("hello"),
         )
 
         assert point_id == "point-123"
+        request = mock_connection.call.call_args.args[1]
+        assert list(request.dense_vector.values) == [1.0, 2.0, 3.0]
+        assert not request.HasField("sparse_vector")
+        assert not request.HasField("id")
+
+    asyncio.run(run())
+
+
+def test_async_insert_sparse_point_with_id(client, mock_connection):
+    async def run():
+        mock_connection.call.return_value = pb.PointID(id=pb.UUID(value="point-1"))
+
+        await client.insert(
+            sparse_vector=SparseVector([1, 5], [0.5, 2.0]),
+            point_id="point-1",
+        )
+
+        request = mock_connection.call.call_args.args[1]
+        assert request.id.id.value == "point-1"
+        assert list(request.sparse_vector.token_ids) == [1, 5]
+        assert not request.HasField("dense_vector")
 
     asyncio.run(run())
 
@@ -58,9 +79,17 @@ def test_async_insert_rejects_invalid_vector(client):
     async def run():
         with pytest.raises(TypeError):
             await client.insert(
-                vector=[1, 2, 3],
+                dense_vector=[1, 2, 3],  # not DenseVector
                 payload=Payload.text("hello"),
             )
+
+    asyncio.run(run())
+
+
+def test_async_insert_rejects_point_without_vectors(client):
+    async def run():
+        with pytest.raises(ValueError):
+            await client.insert(payload=Payload.text("hello"))
 
     asyncio.run(run())
 
@@ -70,49 +99,45 @@ def test_async_insert_rejects_invalid_vector(client):
 
 def test_async_batch_insert_success(client, mock_connection):
     async def run():
-        response = Mock()
-        response.ids = [
-            Mock(id=Mock(value="p1")),
-            Mock(id=Mock(value="p2")),
+        mock_connection.call.return_value = pb.InsertPointsBatchResponse(
+            ids=[pb.PointID(id=pb.UUID(value="p1")), pb.PointID(id=pb.UUID(value="p2"))]
+        )
+        points = [
+            PointInput(dense_vector=DenseVector([1, 2, 3]), payload=Payload.text("a")),
+            PointInput(sparse_vector=SparseVector([2], [1.0])),
         ]
-        mock_connection.call.return_value = response
 
-        items = [
-            (DenseVector([1, 2, 3]), Payload.text("a")),
-            (DenseVector([4, 5, 6]), Payload.text("b")),
-        ]
-        result = await client.batch_insert(items=items)
+        result = await client.batch_insert(points=points)
+
         assert result == ["p1", "p2"]
+        request = mock_connection.call.call_args.args[1]
+        assert len(request.points) == 2
 
     asyncio.run(run())
 
 
-def test_async_batch_insert_invalid_items_type(client):
+def test_async_batch_insert_invalid_points_type(client):
     async def run():
         with pytest.raises(TypeError):
-            await client.batch_insert(items="not-a-list")
+            await client.batch_insert(points="not-a-list")
 
     asyncio.run(run())
 
 
-def test_async_batch_insert_invalid_tuple_structure(client):
+def test_async_batch_insert_rejects_non_point_input(client):
     async def run():
-        items = [
-            (DenseVector([1, 2, 3]),),  # only one element
-        ]
         with pytest.raises(TypeError):
-            await client.batch_insert(items=items)
+            await client.batch_insert(
+                points=[(DenseVector([1, 2, 3]), Payload.text("a"))]
+            )
 
     asyncio.run(run())
 
 
-def test_async_batch_insert_invalid_vector(client):
+def test_async_batch_insert_rejects_empty(client):
     async def run():
-        items = [
-            ([1, 2, 3], Payload.text("a")),  # not DenseVector
-        ]
-        with pytest.raises(TypeError):
-            await client.batch_insert(items=items)
+        with pytest.raises(ValueError):
+            await client.batch_insert(points=[])
 
     asyncio.run(run())
 
@@ -122,18 +147,18 @@ def test_async_batch_insert_invalid_vector(client):
 
 def test_async_get_point_success(client, mock_connection):
     async def run():
-        proto_point = Mock()
-        proto_point.id.id.value = "point-123"
-        proto_point.vector.values = [1, 2, 3]
-        proto_point.payload.content_type = ContentType.TEXT.to_proto()
-        proto_point.payload.content = "hello"
-
-        mock_connection.call.return_value = proto_point
+        mock_connection.call.return_value = pb.Point(
+            id=pb.PointID(id=pb.UUID(value="point-123")),
+            sparse_vector=pb.SparseVector(token_ids=[1, 4], weights=[0.5, 2.0]),
+            payload=pb.Payload(content_type=pb.Text, content="hello"),
+        )
 
         point = await client.get(point_id="point-123")
 
         assert isinstance(point, Point)
         assert point.id == "point-123"
+        assert point.dense_vector is None
+        assert point.sparse_vector == SparseVector([1, 4], [0.5, 2.0])
         assert point.payload.content == "hello"
 
     asyncio.run(run())
@@ -159,7 +184,7 @@ def test_async_delete_success(client, mock_connection):
 
         await client.delete(point_id="point-123")
 
-        mock_connection.call.assert_awaited_once()
+        mock_connection.call.assert_called_once()
 
     asyncio.run(run())
 
@@ -167,69 +192,49 @@ def test_async_delete_success(client, mock_connection):
 # Search
 
 
-def test_async_search_success(client, mock_connection):
+def test_async_dense_search_success(client, mock_connection):
     async def run():
-        mock_connection.call.return_value = Mock(
-            result_point_ids=[
-                Mock(id=Mock(value="p1")),
-                Mock(id=Mock(value="p2")),
-            ],
-            scores=[0.1, 0.2],
+        mock_connection.call.return_value = pb.SearchResponse(
+            hits=[
+                pb.SearchHit(id=pb.PointID(id=pb.UUID(value="p1")), score=0.25),
+                pb.SearchHit(id=pb.PointID(id=pb.UUID(value="p2")), score=0.5),
+            ]
+        )
+        query = SearchQuery(
+            limit=2, query=DenseQuery(DenseVector([1, 2, 3]), Similarity.COSINE, ef=128)
+        )
+
+        results = await client.search(query=query)
+
+        assert results == [SearchHit("p1", 0.25), SearchHit("p2", 0.5)]
+        request = mock_connection.call.call_args.args[1]
+        assert request.limit == 2
+        assert request.dense.ef == 128
+
+    asyncio.run(run())
+
+
+def test_async_sparse_search_success(client, mock_connection):
+    async def run():
+        mock_connection.call.return_value = pb.SearchResponse(
+            hits=[pb.SearchHit(id=pb.PointID(id=pb.UUID(value="p1")), score=2.0)]
         )
 
         results = await client.search(
-            vector=DenseVector([1, 2, 3]),
-            similarity=Similarity.COSINE,
-            limit=2,
+            query=SearchQuery(limit=5, query=SparseVector([4], [1.0]))
         )
 
-        assert results == [("p1", 0.1), ("p2", 0.2)]
-
-    asyncio.run(run())
-
-
-def test_async_search_with_query_object(client, mock_connection):
-    async def run():
-        mock_connection.call.return_value = Mock(
-            result_point_ids=[
-                Mock(id=Mock(value="p1")),
-            ],
-            scores=[0.1],
-        )
-
-        q = SearchQuery(DenseVector([1, 2, 3]), Similarity.COSINE, 2)
-        results = await client.search(query=q)
-
-        assert results == [("p1", 0.1)]
-
-    asyncio.run(run())
-
-
-def test_async_search_accepts_ef(client, mock_connection):
-    async def run():
-        mock_connection.call.return_value = Mock(result_point_ids=[], scores=[])
-
-        await client.search(
-            vector=DenseVector([1, 2, 3]),
-            similarity=Similarity.COSINE,
-            limit=2,
-            ef=128,
-        )
-
+        assert results == [SearchHit("p1", 2.0)]
         request = mock_connection.call.call_args.args[1]
-        assert request.ef == 128
+        assert request.WhichOneof("query") == "sparse"
 
     asyncio.run(run())
 
 
-def test_async_search_invalid_vector(client):
+def test_async_search_rejects_non_search_query(client):
     async def run():
         with pytest.raises(TypeError):
-            await client.search(
-                vector=[1, 2, 3],
-                similarity=Similarity.COSINE,
-                limit=2,
-            )
+            await client.search(query=DenseVector([1, 2, 3]))
 
     asyncio.run(run())
 
@@ -237,122 +242,44 @@ def test_async_search_invalid_vector(client):
 # Batch Search
 
 
-def test_async_batch_search_full_tuple(client, mock_connection):
+def test_async_batch_search_mixes_dense_and_sparse(client, mock_connection):
     async def run():
-        mock_connection.call.return_value = Mock(
+        mock_connection.call.return_value = pb.SearchBatchResponse(
             results=[
-                Mock(result_point_ids=[Mock(id=Mock(value="p1"))], scores=[0.5]),
-                Mock(result_point_ids=[Mock(id=Mock(value="p2"))], scores=[0.5]),
+                pb.SearchResponse(
+                    hits=[
+                        pb.SearchHit(id=pb.PointID(id=pb.UUID(value="p1")), score=0.5)
+                    ]
+                ),
+                pb.SearchResponse(),
             ]
         )
         queries = [
-            (DenseVector([1, 2, 3]), Similarity.COSINE, 2),
-            (DenseVector([4, 5, 6]), Similarity.EUCLIDEAN, 1),
+            SearchQuery(2, DenseQuery(DenseVector([1, 2, 3]), Similarity.EUCLIDEAN)),
+            SearchQuery(1, SparseVector([7], [1.0])),
         ]
+
         result = await client.batch_search(queries=queries)
-        assert result == [[("p1", 0.5)], [("p2", 0.5)]]
 
-    asyncio.run(run())
-
-
-def test_async_batch_search_searchquery_objects(client, mock_connection):
-    async def run():
-        mock_connection.call.return_value = Mock(
-            results=[
-                Mock(result_point_ids=[Mock(id=Mock(value="p1"))], scores=[0.5]),
-            ]
-        )
-        queries = [
-            SearchQuery(DenseVector([1, 2, 3]), Similarity.COSINE, 2),
-        ]
-        result = await client.batch_search(queries=queries)
-        assert result == [[("p1", 0.5)]]
-
-    asyncio.run(run())
-
-
-def test_async_batch_search_vectors_with_global_params(client, mock_connection):
-    async def run():
-        mock_connection.call.return_value = Mock(
-            results=[
-                Mock(result_point_ids=[Mock(id=Mock(value="p1"))], scores=[0.5]),
-            ]
-        )
-        queries = [DenseVector([1, 2, 3])]
-        result = await client.batch_search(
-            queries=queries,
-            similarity=Similarity.MANHATTAN,
-            limit=2,
-        )
-        assert result == [[("p1", 0.5)]]
-
-    asyncio.run(run())
-
-
-def test_async_batch_search_vector_similarity_with_global_limit(
-    client, mock_connection
-):
-    async def run():
-        mock_connection.call.return_value = Mock(
-            results=[
-                Mock(result_point_ids=[Mock(id=Mock(value="p1"))], scores=[0.5]),
-            ]
-        )
-        queries = [
-            (DenseVector([1, 2, 3]), Similarity.COSINE),
-        ]
-        result = await client.batch_search(
-            queries=queries,
-            limit=2,
-        )
-        assert result == [[("p1", 0.5)]]
-
-    asyncio.run(run())
-
-
-def test_async_batch_search_accepts_ef(client, mock_connection):
-    async def run():
-        mock_connection.call.return_value = Mock(results=[])
-
-        await client.batch_search(
-            queries=[
-                (DenseVector([1, 2, 3]), Similarity.COSINE, 2),
-                (DenseVector([4, 5, 6]), Similarity.COSINE, 1),
-            ],
-            ef=256,
-        )
-
+        assert result == [[SearchHit("p1", 0.5)], []]
         request = mock_connection.call.call_args.args[1]
-        assert [query.ef for query in request.queries] == [256, 256]
+        assert [q.WhichOneof("query") for q in request.queries] == ["dense", "sparse"]
 
     asyncio.run(run())
 
 
-def test_async_batch_search_missing_globals_for_vector(client):
+def test_async_batch_search_rejects_invalid_format(client):
     async def run():
-        queries = [DenseVector([1, 2, 3])]
-        with pytest.raises(ValueError):
-            await client.batch_search(queries=queries)
-
-    asyncio.run(run())
-
-
-def test_async_batch_search_missing_limit(client):
-    async def run():
-        queries = [
-            (DenseVector([1, 2, 3]), Similarity.COSINE),
-        ]
-        with pytest.raises(ValueError):
-            await client.batch_search(queries=queries)
-
-    asyncio.run(run())
-
-
-def test_async_batch_search_invalid_format(client):
-    async def run():
-        queries = ["invalid"]
         with pytest.raises(TypeError):
-            await client.batch_search(queries=queries)
+            await client.batch_search(queries=["invalid"])
+
+    asyncio.run(run())
+
+
+def test_async_batch_search_rejects_empty(client):
+    async def run():
+        with pytest.raises(ValueError):
+            await client.batch_search(queries=[])
 
     asyncio.run(run())
 

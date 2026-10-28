@@ -1,5 +1,5 @@
 from vortexdb import VortexDB
-from vortexdb import Payload, to_dense_vectors
+from vortexdb import Payload, PointInput, SparseVector, to_dense_vectors
 
 
 def main():
@@ -15,18 +15,20 @@ def main():
     ]
     vectors = to_dense_vectors(raw_vectors)
 
-    p1 = Payload.text("hello world")
-    p2 = Payload.image("/img/a.png")
-    p3 = Payload.text("foo bar")
-
-    items = [
-        (vectors[0], p1),
-        (vectors[1], p2),
-        (vectors[2], p3),
+    points = [
+        PointInput(dense_vector=vectors[0], payload=Payload.text("hello world")),
+        PointInput(
+            sparse_vector=SparseVector([3, 17, 42], [0.5, 1.2, 0.8]),
+            payload=Payload.image("/img/a.png"),
+        ),
+        PointInput(
+            dense_vector=vectors[2],
+            sparse_vector=SparseVector([17], [2.0]),
+            payload=Payload.text("foo bar"),
+        ),
     ]
 
-    # Batch Insert
-    point_ids = db.batch_insert(items=items)
+    point_ids = db.batch_insert(points=points)
     print("Inserted ids:\n", point_ids)
 
     for pid in point_ids:

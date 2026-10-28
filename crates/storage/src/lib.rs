@@ -1,11 +1,11 @@
 use crate::rocks_db::RocksDbStorage;
-use defs::{DenseVector, Payload, PointId};
+use defs::{DenseVector, Payload, Point, PointId, SparseVector};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 pub mod checkpoint;
 
-pub type VectorPage = (Vec<(PointId, DenseVector)>, PointId);
+pub type PointPage = (Vec<Point>, PointId);
 
 pub mod error;
 pub mod in_memory;
@@ -18,13 +18,14 @@ pub trait StorageEngine: Send + Sync {
         &self,
         id: PointId,
         vector: Option<DenseVector>,
+        sparse_vector: Option<SparseVector>,
         payload: Option<Payload>,
     ) -> Result<()>;
+    fn get_point(&self, id: PointId) -> Result<Option<Point>>;
     fn get_vector(&self, id: PointId) -> Result<Option<DenseVector>>;
-    fn get_payload(&self, id: PointId) -> Result<Option<Payload>>;
     fn delete_point(&self, id: PointId) -> Result<()>;
     fn contains_point(&self, id: PointId) -> Result<bool>;
-    fn list_vectors(&self, offset: PointId, limit: usize) -> Result<Option<VectorPage>>;
+    fn list_points(&self, offset: PointId, limit: usize) -> Result<Option<PointPage>>;
 
     fn checkpoint_at(&self, path: &Path) -> Result<checkpoint::StorageCheckpoint>;
     fn restore_checkpoint(&mut self, checkpoint: &checkpoint::StorageCheckpoint) -> Result<()>;

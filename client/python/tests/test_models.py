@@ -1,14 +1,15 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
 
+from vortexdb.grpc import vector_db_pb2
 from vortexdb.models import (
+    ContentType,
     DenseVector,
     Payload,
     Point,
     Similarity,
-    ContentType,
 )
-
-from vortexdb.grpc import vector_db_pb2
 
 # DenseVector Tests
 
@@ -17,11 +18,87 @@ def test_dense_vector_valid():
     a = [1, 2.5, 3]
     v = DenseVector(a)
     assert v.values == [1.0, 2.5, 3.0]
+    assert all(isinstance(value, float) for value in v.values)
 
 
 def test_dense_vector_accepts_tuple():
     v = DenseVector((1, 2, 3))
     assert v.values == [1.0, 2.0, 3.0]
+
+
+def test_dense_vector_accepts_numpy_array():
+    numpy = pytest.importorskip("numpy")
+    v = DenseVector(numpy.array([1, 2.5, 3], dtype=numpy.float32))
+    assert v.values == [1.0, 2.5, 3.0]
+
+
+def test_dense_vector_accepts_numpy_scalars_in_list():
+    numpy = pytest.importorskip("numpy")
+    v = DenseVector([numpy.float32(1.5), numpy.float32(2.5)])
+    assert v.values == [1.5, 2.5]
+    assert all(type(value) is float for value in v.values)
+
+
+def test_dense_vector_accepts_pytorch_tensor():
+    torch = pytest.importorskip("torch")
+    v = DenseVector(torch.tensor([1, 2.5, 3]))
+    assert v.values == [1.0, 2.5, 3.0]
+
+
+def test_dense_vector_accepts_tensorflow_tensor():
+    tensorflow = pytest.importorskip("tensorflow")
+    v = DenseVector(tensorflow.constant([1.0, 2.5, 3.0]))
+    assert v.values == [1.0, 2.5, 3.0]
+
+
+def test_dense_vector_accepts_jax_array():
+    jax_numpy = pytest.importorskip("jax.numpy")
+    v = DenseVector(jax_numpy.array([1, 2.5, 3]))
+    assert v.values == [1.0, 2.5, 3.0]
+
+
+class _TensorLike:
+    def tolist(self):
+        return [1, 2.5, 3]
+
+
+def test_dense_vector_accepts_tensor_with_tolist():
+    v = DenseVector(_TensorLike())
+    assert v.values == [1.0, 2.5, 3.0]
+
+
+class _TensorShape:
+    rank = 1
+
+
+class _MaterializedTensor:
+    def tolist(self):
+        return [1, 2.5, 3]
+
+
+class _TensorFlowLike:
+    shape = _TensorShape()
+
+    def numpy(self):
+        return _MaterializedTensor()
+
+
+def test_dense_vector_accepts_tensor_with_numpy_conversion():
+    v = DenseVector(_TensorFlowLike())
+    assert v.values == [1.0, 2.5, 3.0]
+
+
+class _JaxLike:
+    ndim = 1
+
+    def __array__(self):
+        numpy = pytest.importorskip("numpy")
+        return numpy.array([1, 2.5, 3])
+
+
+def test_dense_vector_accepts_tensor_with_array_protocol():
+    v = DenseVector(_JaxLike())
+    assert v.values == [1.0, 2.5, 3.0]
 
 
 def test_dense_vector_rejects_empty():
@@ -34,9 +111,39 @@ def test_dense_vector_rejects_non_numeric():
         DenseVector([1, "a", 3])
 
 
+@pytest.mark.parametrize("values", [[[1, 2], [3, 4]], [[1, 2, 3]]])
+def test_dense_vector_rejects_nested_sequences(values):
+    with pytest.raises(ValueError, match="one-dimensional"):
+        DenseVector(values)
+
+
+def test_dense_vector_rejects_multidimensional_array():
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(ValueError, match="one-dimensional"):
+        DenseVector(numpy.array([[1, 2], [3, 4]]))
+
+
+def test_dense_vector_rejects_scalar_array():
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(ValueError, match="one-dimensional"):
+        DenseVector(numpy.array(1.0))
+
+
+class _MatrixLike:
+    ndim = 2
+
+    def tolist(self):
+        return [[1, 2], [3, 4]]
+
+
+def test_dense_vector_rejects_multidimensional_tensor_like_value():
+    with pytest.raises(ValueError, match="one-dimensional"):
+        DenseVector(_MatrixLike())
+
+
 def test_dense_vector_is_frozen():
     v = DenseVector([1, 2, 3])
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         v.values = [4, 5, 6]
 
 
@@ -44,6 +151,41 @@ def test_dense_vector_to_proto():
     v = DenseVector([1, 2, 3])
     proto = v.to_proto()
     assert list(proto.values) == [1.0, 2.0, 3.0]
+
+
+def test_dense_vector_to_numpy():
+    numpy = pytest.importorskip("numpy")
+    result = DenseVector([1, 2.5, 3]).to_numpy()
+    assert isinstance(result, numpy.ndarray)
+    assert result.ndim == 1
+    assert numpy.issubdtype(result.dtype, numpy.floating)
+    assert result.tolist() == [1.0, 2.5, 3.0]
+
+
+def test_dense_vector_to_torch():
+    torch = pytest.importorskip("torch")
+    result = DenseVector([1, 2.5, 3]).to_torch()
+    assert isinstance(result, torch.Tensor)
+    assert result.ndim == 1
+    assert result.dtype.is_floating_point
+    assert result.tolist() == [1.0, 2.5, 3.0]
+
+
+def test_dense_vector_to_tensorflow():
+    tensorflow = pytest.importorskip("tensorflow")
+    result = DenseVector([1, 2.5, 3]).to_tensorflow()
+    assert tensorflow.is_tensor(result)
+    assert result.shape.rank == 1
+    assert result.dtype.is_floating
+    assert result.numpy().tolist() == [1.0, 2.5, 3.0]
+
+
+def test_dense_vector_to_jax():
+    jax_numpy = pytest.importorskip("jax.numpy")
+    result = DenseVector([1, 2.5, 3]).to_jax()
+    assert result.ndim == 1
+    assert jax_numpy.issubdtype(result.dtype, jax_numpy.floating)
+    assert result.tolist() == [1.0, 2.5, 3.0]
 
 
 # Similarity Test

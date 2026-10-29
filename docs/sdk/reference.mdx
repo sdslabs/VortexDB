@@ -291,15 +291,17 @@ from vortexdb import DenseVector
 ### Constructor
 
 ```python
-DenseVector(values: List[float] | Tuple[float, ...])
+DenseVector(values: List[float] | Tuple[float, ...] | array | tensor)
 ```
 
-<ParamField body="values" type="List[float] | Tuple[float, ...]" required>
-  The vector components. Must be non-empty and contain numeric values.
+<ParamField body="values" type="List[float] | Tuple[float, ...] | array | tensor" required>
+  A list, tuple, 1D NumPy array, or 1D PyTorch, TensorFlow, or JAX tensor.
+  Must be non-empty and contain numeric values.
 </ParamField>
 
 **Raises:**
-- `TypeError`: If values is not a list or tuple
+- `TypeError`: If values is not a supported sequence, array, or tensor
+- `ValueError`: If values is not one-dimensional
 - `ValueError`: If values is empty
 - `TypeError`: If any value is not numeric
 
@@ -314,6 +316,12 @@ vec = DenseVector((0.1, 0.2, 0.3, 0.4))
 
 # Integers are converted to floats
 vec = DenseVector([1, 2, 3, 4])  # -> [1.0, 2.0, 3.0, 4.0]
+
+# NumPy arrays and tensors can be passed directly
+vec = DenseVector(numpy_array)
+vec = DenseVector(torch_tensor)
+vec = DenseVector(tensorflow_tensor)
+vec = DenseVector(jax_array)
 ```
 
 ### Methods
@@ -332,6 +340,20 @@ def to_list(self) -> list[float]
 vec = DenseVector([0.1, 0.2, 0.3])
 values = vec.to_list()  # [0.1, 0.2, 0.3]
 ```
+
+#### Framework conversions
+
+Convert the vector to an array or tensor from an installed framework.
+
+```python
+numpy_array = vec.to_numpy()
+torch_tensor = vec.to_torch()
+tensorflow_tensor = vec.to_tensorflow()
+jax_array = vec.to_jax()
+```
+
+The framework libraries are optional and are imported only when their conversion
+methods are called.
 
 ### Properties
 

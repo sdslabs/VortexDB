@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
-from vortexdb.grpc import vector_db_pb2
+from numbers import Real
+from typing import Any
 
+from vortexdb.grpc import vector_db_pb2
 
 # I found this to be a good idea, because
 # 1. readability
@@ -43,31 +44,108 @@ class ContentType(Enum):
         }[value]
 
 
-# TODO Extend support to other data types than lists or tuples (numpy arrays probably)
-# TODO Further compatibility to allow conversions directly to numpy arrays (similar to .to_list())
 @dataclass(frozen=True)
 class DenseVector:
-    values: List[float]
+    values: list[float]
 
     def __post_init__(self):
-        if not isinstance(self.values, (list, tuple)):
-            raise TypeError("DenseVector expects a list or tuple of floats")
+        if isinstance(self.values, (list, tuple)):
+            normalized_values = list(self.values)
+        else:
+            normalized_values = self._array_like_to_list(self.values)
 
-        if not self.values:
+        if not normalized_values:
             raise ValueError("DenseVector cannot be empty")
 
-        for v in self.values:
-            if not isinstance(v, (int, float)):
+        if any(isinstance(value, (list, tuple)) for value in normalized_values):
+            raise ValueError("DenseVector expects a one-dimensional vector")
+
+        for v in normalized_values:
+            if not isinstance(v, Real):
                 raise TypeError("DenseVector values must be numeric (int or float)")
 
-        # force float normalization
-        object.__setattr__(self, "values", [float(v) for v in self.values])
+        object.__setattr__(self, "values", [float(v) for v in normalized_values])
+
+    @staticmethod
+    def _array_like_to_list(values: Any) -> list[Any]:
+        shape = getattr(values, "shape", None)
+        rank = getattr(values, "ndim", None)
+
+        if rank is None and shape is not None:
+            rank = getattr(shape, "rank", None)
+            if rank is None:
+                try:
+                    rank = len(shape)
+                except (TypeError, ValueError):
+                    pass
+
+        if rank is not None and rank != 1:
+            raise ValueError("DenseVector expects a one-dimensional vector")
+
+        to_list = getattr(values, "tolist", None)
+        if callable(to_list):
+            converted = to_list()
+        else:
+            to_numpy = getattr(values, "numpy", None)
+            if callable(to_numpy):
+                converted = to_numpy()
+            else:
+                to_array = getattr(values, "__array__", None)
+                if not callable(to_array):
+                    raise TypeError("DenseVector could not convert the array or tensor")
+                converted = to_array()
+
+            converted_to_list = getattr(converted, "tolist", None)
+            if not callable(converted_to_list):
+                raise TypeError("DenseVector could not convert the array or tensor")
+            converted = converted_to_list()
+
+        if not isinstance(converted, list):
+            raise TypeError("DenseVector could not convert the array or tensor")
+        return converted
 
     def to_proto(self) -> vector_db_pb2.DenseVector:
         return vector_db_pb2.DenseVector(values=self.values)
 
     def to_list(self) -> list[float]:
         return list(self.values)
+
+    # Keep framework dependencies optional by importing only when conversion is requested.
+    def to_numpy(self) -> Any:
+        try:
+            import numpy
+        except ImportError as error:
+            raise ImportError(
+                "NumPy is required to convert DenseVector to an array"
+            ) from error
+        return numpy.asarray(self.values, dtype=float)
+
+    def to_torch(self) -> Any:
+        try:
+            import torch
+        except ImportError as error:
+            raise ImportError(
+                "PyTorch is required to convert DenseVector to a tensor"
+            ) from error
+        return torch.tensor(self.values)
+
+    def to_tensorflow(self) -> Any:
+        try:
+            import tensorflow
+        except ImportError as error:
+            raise ImportError(
+                "TensorFlow is required to convert DenseVector to a tensor"
+            ) from error
+        return tensorflow.convert_to_tensor(self.values)
+
+    def to_jax(self) -> Any:
+        try:
+            import jax.numpy
+        except ImportError as error:
+            raise ImportError(
+                "JAX is required to convert DenseVector to an array"
+            ) from error
+        return jax.numpy.asarray(self.values)
 
 
 # & Helper Function for Batch of DenseVectors

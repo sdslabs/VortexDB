@@ -228,11 +228,28 @@ validation and protobuf conversion internally
 ### `DenseVector`
 
 ``` 
-DenseVector(values: list[float] | tuple[float, ...])
+DenseVector(values: list[float] | tuple[float, ...] | array | tensor)
 ```
 - Validates numeric input
+- Accepts 1D NumPy arrays and PyTorch, TensorFlow, or JAX tensors
+- Rejects arrays and tensors that are not 1D
 - Normalizes values to `float`
 - Immutable (`frozen=True`)
+
+Input conversion uses the capabilities exposed by the value rather than requiring
+NumPy, PyTorch, TensorFlow, or JAX as client dependencies.
+
+```python
+vector = DenseVector(numpy_array)
+
+vector.to_list()
+vector.to_numpy()
+vector.to_torch()
+vector.to_tensorflow()
+vector.to_jax()
+```
+
+Each reverse conversion helper requires its corresponding library to be installed.
 
 --- 
 

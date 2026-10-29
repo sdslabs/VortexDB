@@ -5,3 +5,4 @@ __pycache__/
 .hatch/
 .venv/
 venv/
+.ruff_cache/

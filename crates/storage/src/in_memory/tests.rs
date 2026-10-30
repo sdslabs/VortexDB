@@ -1,6 +1,7 @@
 use super::*;
 
-use defs::ContentType;
+use defs::{ContentType, Metadata};
+use serde_json::{Value, json};
 use std::io::{Read, Write};
 use tempfile::{TempDir, tempdir};
 use uuid::Uuid;
@@ -9,11 +10,16 @@ fn create_test_storage() -> MemoryStorage {
     MemoryStorage::new()
 }
 
-fn test_payload(content: &str) -> Payload {
+fn test_payload(content: &str, metadata: Metadata) -> Payload {
     Payload {
         content_type: ContentType::Text,
         content: content.to_string(),
+        metadata: meta(json!({"age": 12})),
     }
+}
+
+fn meta(v: serde_json::Value) -> Metadata {
+    v.as_object().unwrap().clone()
 }
 
 #[test]
@@ -21,7 +27,7 @@ fn test_insert_and_get_vector() {
     let storage = create_test_storage();
     let id = Uuid::new_v4();
     let vector = Some(vec![0.1, 0.2, 0.3]);
-    let payload = Some(test_payload("Test"));
+    let payload = Some(test_payload("Test", meta(json!({"age": 12}))));
 
     storage.insert_point(id, vector.clone(), payload).unwrap();
 
@@ -32,7 +38,7 @@ fn test_insert_and_get_vector() {
 fn test_insert_and_get_payload() {
     let storage = create_test_storage();
     let id = Uuid::new_v4();
-    let payload = Some(test_payload("Test"));
+    let payload = Some(test_payload("Test", meta(json!({"age": 12}))));
 
     storage.insert_point(id, None, payload.clone()).unwrap();
 
@@ -47,7 +53,11 @@ fn test_contains_and_delete_point() {
     assert!(!storage.contains_point(id).unwrap());
 
     storage
-        .insert_point(id, Some(vec![0.4, 0.5, 0.6]), Some(test_payload("Test")))
+        .insert_point(
+            id,
+            Some(vec![0.4, 0.5, 0.6]),
+            Some(test_payload("Test", meta(json!({"age": 12})))),
+        )
         .unwrap();
     assert!(storage.contains_point(id).unwrap());
 
@@ -68,16 +78,41 @@ fn test_list_vectors_respects_offset_limit_and_skips_payload_only_points() {
     ];
 
     storage
-        .insert_point(ids[0], Some(vec![1.0, 1.1]), Some(test_payload("one")))
+        .insert_point(
+            ids[0],
+            Some(vec![1.0, 1.1]),
+            Some(test_payload("one", meta(json!({"age": 12, "height": 123})))),
+        )
         .unwrap();
     storage
-        .insert_point(ids[1], None, Some(test_payload("payload-only")))
+        .insert_point(
+            ids[1],
+            None,
+            Some(test_payload(
+                "payload-only",
+                meta(json!({"age": 21, "height": 139})),
+            )),
+        )
         .unwrap();
     storage
-        .insert_point(ids[2], Some(vec![3.0, 3.1]), Some(test_payload("three")))
+        .insert_point(
+            ids[2],
+            Some(vec![3.0, 3.1]),
+            Some(test_payload(
+                "three",
+                meta(json!({"age": 49, "height": 154})),
+            )),
+        )
         .unwrap();
     storage
-        .insert_point(ids[3], Some(vec![4.0, 4.1]), Some(test_payload("four")))
+        .insert_point(
+            ids[3],
+            Some(vec![4.0, 4.1]),
+            Some(test_payload(
+                "four",
+                meta(json!({"age": 10, "height": 190})),
+            )),
+        )
         .unwrap();
 
     let (first_page, next_offset) = storage.list_vectors(Uuid::nil(), 2).unwrap().unwrap();
@@ -110,7 +145,10 @@ fn test_create_and_restore_checkpoint() {
         .insert_point(
             id_before_checkpoint,
             Some(vec![0.1, 0.2, 0.3]),
-            Some(test_payload("before")),
+            Some(test_payload(
+                "before",
+                meta(json!({"age": 10, "height": 190})),
+            )),
         )
         .unwrap();
     let checkpoint = storage.checkpoint_at(temp_dir.path()).unwrap();
@@ -119,7 +157,10 @@ fn test_create_and_restore_checkpoint() {
         .insert_point(
             id_after_checkpoint,
             Some(vec![0.4, 0.5, 0.6]),
-            Some(test_payload("after")),
+            Some(test_payload(
+                "after",
+                meta(json!({"age": 10, "height": 190})),
+            )),
         )
         .unwrap();
 
@@ -129,7 +170,10 @@ fn test_create_and_restore_checkpoint() {
     assert!(!storage.contains_point(id_after_checkpoint).unwrap());
     assert_eq!(
         storage.get_payload(id_before_checkpoint).unwrap(),
-        Some(test_payload("before"))
+        Some(test_payload(
+            "before",
+            meta(json!({"age": 10, "height": 190}))
+        ))
     );
 }
 
@@ -140,7 +184,11 @@ fn test_checkpoint_writes_header() {
     let id = Uuid::new_v4();
 
     storage
-        .insert_point(id, Some(vec![0.1, 0.2, 0.3]), Some(test_payload("point")))
+        .insert_point(
+            id,
+            Some(vec![0.1, 0.2, 0.3]),
+            Some(test_payload("point", meta(json!({"age": 12})))),
+        )
         .unwrap();
     let checkpoint = storage.checkpoint_at(temp_dir.path()).unwrap();
 

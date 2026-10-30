@@ -11,6 +11,8 @@ pub type ElementByte = u8;
 
 pub type Dimension = usize;
 
+pub type Metadata = serde_json::Map<String, serde_json::Value>;
+
 // Dense Vector and Vector are considered same
 // Sparse vector implementation not supported yet. Refer lib/sparse/src/common/sparse_vector.rs
 pub type DenseVector = Vec<Element>;
@@ -32,6 +34,8 @@ pub enum ContentType {
 pub struct Payload {
     pub content_type: ContentType,
     pub content: String,
+    #[serde(default)]
+    pub metadata: Metadata,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -46,6 +50,43 @@ pub struct Point {
     pub id: PointId,
     pub vector: Option<DenseVector>,
     pub payload: Option<Payload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FilterOp {
+    Eq,
+    Neq,
+    Lt,
+    Leq,
+    Gt,
+    Gteq,
+    In,
+    Exists,
+    NotExists,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FieldCondition {
+    pub key: String,
+    pub op: FilterOp,
+    #[serde(default)]
+    pub value: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FilterMode {
+    #[default]
+    Post,
+    Inline,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Filter {
+    Condition(FieldCondition),
+    And(Vec<Filter>),
+    Or(Vec<Filter>),
+    Not(Box<Filter>),
+    Xor(Vec<Filter>),
 }
 
 /// Struct which will be stored in the vector index
@@ -86,7 +127,11 @@ pub struct SearchQueryInput {
     pub similarity: Similarity,
     pub limit: usize,
     #[serde(default)]
-    pub ef: Option<usize>,
+    pub ef: Option<usize>, // adding 2 terms in this Struct, filter and method of filteration
+    #[serde(default)]
+    pub filter: Option<Filter>,
+    #[serde(default)]
+    pub filter_mode: FilterMode,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -139,6 +184,32 @@ impl<'q> Eq for DistanceOrderedVector<'q> {}
 //     Context(ContextQuery<VectorInternal>),
 // }
 
+impl Filter {
+    pub fn matches(&self, metadata: &Metadata) -> bool {
+        match self {
+            Filter::Condition(c) => c.matches(metadata),
+            Filter::And(fs) => fs.iter().all(|f| f.matches(metadata)),
+            Filter::Or(fs) => fs.iter().any(|f| f.matches(metadata)),
+            Filter::Not(f) => !f.matches(metadata),
+            Filter::Xor(fs) => fs.iter().filter(|f| f.matches(metadata)).count() % 2 == 1,
+        }
+    }
+}
+
+impl FieldCondition {
+    fn matches(&self, metadata: &Metadata) -> bool {
+        let found = resolve_path(metadata, &self.key);
+        match self.op {
+            FilterOp::Exists => found.is_some(),
+            FilterOp::NotExists => found.is_none(),
+            _ => match (found, self.value.as_ref()) {
+                (Some(lhs), Some(rhs)) => compare_op(&self.op, lhs, rhs),
+                _ => false,
+            },
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct OrdF32(pub f32);
 
@@ -168,5 +239,52 @@ impl PartialOrd for OrdF32 {
 impl From<f32> for OrdF32 {
     fn from(x: f32) -> Self {
         Self(x)
+    }
+}
+
+fn resolve_path<'a>(metadata: &'a Metadata, key: &str) -> Option<&'a serde_json::Value> {
+    let mut segments = key.split('.');
+    let first = segments.next()?;
+    let mut cur = metadata.get(first)?;
+    for seg in segments {
+        cur = cur.get(seg)?;
+    }
+    Some(cur)
+}
+
+fn value_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+    match (a, b) {
+        (serde_json::Value::Number(x), serde_json::Value::Number(y)) => {
+            matches!((x.as_f64(), y.as_f64()), (Some(x), Some(y)) if x == y)
+        }
+        _ => a == b,
+    }
+}
+
+fn ordered_cmp(a: &serde_json::Value, b: &serde_json::Value) -> Option<Ordering> {
+    match (a, b) {
+        (serde_json::Value::Number(x), serde_json::Value::Number(y)) => {
+            x.as_f64()?.partial_cmp(&y.as_f64()?)
+        }
+        (serde_json::Value::String(x), serde_json::Value::String(y)) => Some(x.cmp(y)),
+        (serde_json::Value::Bool(x), serde_json::Value::Bool(y)) => Some(x.cmp(y)),
+        _ => None,
+    }
+}
+
+fn compare_op(op: &FilterOp, a: &serde_json::Value, b: &serde_json::Value) -> bool {
+    match op {
+        FilterOp::Eq => value_eq(a, b),
+        FilterOp::Neq => !value_eq(a, b),
+        FilterOp::Lt | FilterOp::Leq | FilterOp::Gt | FilterOp::Gteq => match ordered_cmp(a, b) {
+            Some(Ordering::Less) => matches!(op, FilterOp::Lt | FilterOp::Leq),
+            Some(Ordering::Equal) => matches!(op, FilterOp::Leq | FilterOp::Gteq),
+            Some(Ordering::Greater) => matches!(op, FilterOp::Gt | FilterOp::Gteq),
+            None => false,
+        },
+        FilterOp::In => {
+            matches!(b, serde_json::Value::Array(xs) if xs.iter().any(|i| value_eq(i, a)))
+        }
+        FilterOp::Exists | FilterOp::NotExists => true,
     }
 }

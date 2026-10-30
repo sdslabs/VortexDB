@@ -9,6 +9,8 @@ license.workspace = true
 [dependencies]
 defs.workspace = true
 index.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 snafu.workspace = true
 snapshot.workspace = true
 storage.workspace = true

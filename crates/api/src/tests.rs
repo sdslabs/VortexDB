@@ -2,10 +2,10 @@ use super::*;
 
 // TODO: Add more exhaustive tests
 
-use std::sync::Mutex;
-
-use defs::ContentType;
+use defs::{ContentType, FilterMode::Post, Metadata};
+use serde_json::{Value, json};
 use snapshot::{engine::SnapshotEngine, registry::local::LocalRegistry};
+use std::sync::Mutex;
 use tempfile::{TempDir, tempdir};
 
 // Helper function to create a test database
@@ -27,11 +27,16 @@ fn create_test_db_with_storage(storage_type: StorageType) -> (VectorDb, TempDir)
     (init_api(config).unwrap(), temp_dir)
 }
 
-fn test_payload(content: &str) -> Payload {
+fn test_payload(content: &str, metadata: Metadata) -> Payload {
     Payload {
         content_type: ContentType::Text,
         content: content.to_string(),
+        metadata: metadata,
     }
+}
+
+fn meta(v: serde_json::Value) -> Metadata {
+    v.as_object().unwrap().clone()
 }
 
 #[test]
@@ -41,6 +46,7 @@ fn test_insert_and_get() {
     let payload = Payload {
         content_type: ContentType::Text,
         content: "Test content".to_string(),
+        metadata: meta(json!({"age": 23})),
     };
 
     // Test insert
@@ -63,7 +69,7 @@ fn test_insert_and_get() {
 fn test_insert_and_get_with_in_memory_storage() {
     let (db, _temp_dir) = create_test_db_with_storage(StorageType::InMemory);
     let vector = vec![1.0, 2.0, 3.0];
-    let payload = test_payload("Test content");
+    let payload = test_payload("Test content", meta(json!({"age":12,"height":121})));
 
     let id = db.insert(vector.clone(), payload.clone()).unwrap();
     let point = db.get(id).unwrap().unwrap();
@@ -81,6 +87,7 @@ fn test_dimension_mismatch() {
     let payload = defs::Payload {
         content_type: ContentType::Text,
         content: "tester".to_string(),
+        metadata: meta(json!({"age": 23})),
     };
 
     let res1 = db.insert(v1, payload.clone());
@@ -105,6 +112,7 @@ fn test_delete() {
     let payload = Payload {
         content_type: ContentType::Text,
         content: "Test content".to_string(),
+        metadata: meta(json!({"age":23})),
     };
 
     // Insert a point
@@ -137,6 +145,7 @@ fn test_search() {
         let payload = Payload {
             content_type: ContentType::Text,
             content: format!("Test content {vector:?}"),
+            metadata: meta(json!({"age":23})),
         };
         let id = db.insert(vector, payload).unwrap();
         ids.push(id);
@@ -150,6 +159,8 @@ fn test_search() {
             similarity: Similarity::Cosine,
             limit: 1,
             ef: None,
+            filter: None,
+            filter_mode: Post,
         })
         .unwrap();
 
@@ -173,6 +184,7 @@ fn test_search_limit() {
                 Payload {
                     content_type: ContentType::Text,
                     content: format!("Test content {i}"),
+                    metadata: meta(json!({"age":23})),
                 },
             )
             .unwrap();
@@ -187,6 +199,8 @@ fn test_search_limit() {
             similarity: Similarity::Euclidean,
             limit: 3,
             ef: None,
+            filter: None,
+            filter_mode: Post,
         })
         .unwrap();
 
@@ -203,6 +217,8 @@ fn test_search_zero_limit() {
         similarity: Similarity::Cosine,
         limit: 0,
         ef: None,
+        filter: None,
+        filter_mode: Post,
     });
 
     assert!(result.is_err());
@@ -228,6 +244,8 @@ fn test_empty_database() {
             similarity: Similarity::Cosine,
             limit: 10,
             ef: None,
+            filter: None,
+            filter_mode: Post,
         })
         .unwrap();
     assert_eq!(results.len(), 0);
@@ -247,6 +265,7 @@ fn test_list_vectors() {
                 Payload {
                     content_type: ContentType::Text,
                     content: format!("Test content {i}"),
+                    metadata: meta(json!({"age":23})),
                 },
             )
             .unwrap();
@@ -277,6 +296,7 @@ fn test_build_index() {
             Payload {
                 content_type: ContentType::Text,
                 content: format!("Test content {i}"),
+                metadata: meta(json!({"age":23})),
             },
         )
         .unwrap();
@@ -301,6 +321,7 @@ fn test_create_and_load_snapshot() {
             Payload {
                 content_type: ContentType::Text,
                 content: "test".to_string(),
+                metadata: meta(json!({"age":23})),
             },
         )
         .unwrap();
@@ -311,6 +332,7 @@ fn test_create_and_load_snapshot() {
             Payload {
                 content_type: ContentType::Text,
                 content: "test".to_string(),
+                metadata: meta(json!({"age":23})),
             },
         )
         .unwrap();
@@ -325,6 +347,7 @@ fn test_create_and_load_snapshot() {
             Payload {
                 content_type: ContentType::Text,
                 content: "test".to_string(),
+                metadata: meta(json!({"age":23})),
             },
         )
         .unwrap();
@@ -354,13 +377,19 @@ fn test_create_and_load_snapshot_with_in_memory_storage() {
     let v2 = vec![3.0, 4.0, 5.0];
     let v3 = vec![6.0, 7.0, 8.0];
 
-    let id1 = old_db.insert(v1.clone(), test_payload("one")).unwrap();
-    let id2 = old_db.insert(v2.clone(), test_payload("two")).unwrap();
+    let id1 = old_db
+        .insert(v1.clone(), test_payload("one", meta(json!({"age": 12}))))
+        .unwrap();
+    let id2 = old_db
+        .insert(v2.clone(), test_payload("two", meta(json!({"age": 32}))))
+        .unwrap();
 
     let temp_snapshot_dir = tempdir().unwrap();
     let snapshot_path = old_db.create_snapshot(temp_snapshot_dir.path()).unwrap();
 
-    let id3 = old_db.insert(v3, test_payload("three")).unwrap();
+    let id3 = old_db
+        .insert(v3, test_payload("three", meta(json!({"age": 22}))))
+        .unwrap();
 
     let reload_config = DbRestoreConfig {
         data_path: temp_dir.path().to_path_buf(),
@@ -405,6 +434,7 @@ fn test_snapshot_engine() {
                 Payload {
                     content_type: ContentType::Text,
                     content: format!("{}", i),
+                    metadata: meta(json!({"age":23})),
                 },
             )
             .unwrap();

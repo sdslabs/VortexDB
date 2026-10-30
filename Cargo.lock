@@ -53,6 +53,8 @@ version = "0.1.0"
 dependencies = [
  "defs",
  "index",
+ "serde",
+ "serde_json",
  "snafu",
  "snapshot",
  "storage",
@@ -490,6 +492,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "serde",
+ "serde_json",
  "snafu",
  "uuid",
 ]
@@ -2449,6 +2452,7 @@ dependencies = [
  "flate2",
  "rocksdb",
  "serde",
+ "serde_json",
  "snafu",
  "tar",
  "tempfile",

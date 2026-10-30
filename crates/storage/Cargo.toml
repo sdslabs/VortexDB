@@ -12,6 +12,7 @@ defs.workspace = true
 flate2 = "1.1.5"
 rocksdb.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 snafu.workspace = true
 tar = "0.4.44"
 tempfile.workspace = true

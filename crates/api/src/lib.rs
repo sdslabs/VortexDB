@@ -1,7 +1,10 @@
-use defs::{DbError, Dimension, IndexedVector, SearchQueryInput, Similarity, SnapshottableDb};
+use defs::{
+    DbError, Dimension, FilterMode, IndexedVector, SearchQueryInput, Similarity, SnapshottableDb,
+};
 use defs::{DenseVector, Payload, Point, PointId, PointInput};
 use index::hnsw::{HnswConfig, HnswIndex};
 use index::kd_tree::{KDTree, KDTreeConfig};
+use std::iter::FilterMap;
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 // use std::sync::atomic::{AtomicU64, Ordering};
@@ -142,9 +145,12 @@ impl VectorDb {
         // Use vector index to find similar vectors
         let index = self.index.read().map_err(|_| ApiError::LockError)?;
 
-        let vectors =
+        let mut vectors =
             index.search_with_ef(query.vector, query.similarity, query.limit, query.ef)?;
 
+        if query.filter_mode == FilterMode::Post {
+            vectors = self.filter_ids(vectors, query.filter.as_ref())?;
+        }
         Ok(vectors)
     }
 
@@ -153,8 +159,11 @@ impl VectorDb {
         let index = self.index.read().unwrap();
 
         for query in queries {
-            let found =
+            let mut found =
                 index.search_with_ef(query.vector, query.similarity, query.limit, query.ef)?;
+            if query.filter_mode == FilterMode::Post {
+                found = self.filter_ids(found, query.filter.as_ref())?;
+            }
             results.push(found);
         }
 
@@ -189,6 +198,30 @@ impl VectorDb {
         }
 
         Ok(inserted)
+    }
+
+    fn payload_matches(&self, id: PointId, filter: &Filter) -> Result<bool> {
+        Ok(self
+            .storage
+            .get_payload(id)?
+            .is_some_and(|p| filter.matches(&p.metadata)))
+    }
+
+    fn filter_ids(
+        &self,
+        ids: impl IntoIterator<Item = (PointId, f32)>,
+        filter: Option<&Filter>,
+    ) -> Result<Vec<(PointId, f32)>> {
+        let Some(f) = filter else {
+            return Ok(ids.into_iter().collect());
+        };
+        let mut out = Vec::new();
+        for id in ids {
+            if self.payload_matches(id.0, f)? {
+                out.push(id);
+            }
+        }
+        Ok(out)
     }
 }
 

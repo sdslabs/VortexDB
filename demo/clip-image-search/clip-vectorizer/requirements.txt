@@ -1,0 +1,8 @@
+# CLIP Vectorizer dependencies (torch installed separately in Dockerfile)
+fastapi>=0.112.0
+uvicorn>=0.30.0
+transformers==4.44.0
+pillow>=10.0.0
+python-multipart>=0.0.9
+huggingface-hub>=0.24.0
+safetensors>=0.4.0
